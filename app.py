@@ -21,6 +21,105 @@ if os.path.exists(DEFAULT_SCRIPT_PATH):
         DEFAULT_SCRIPT_TEXT = f.read()
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  Dark Video Editor Theme CSS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+EDITOR_CSS = """
+/* ── Global dark editor palette ── */
+.gradio-container {
+    background: #1a1a2e !important;
+    color: #e0e0e0 !important;
+    font-family: 'Segoe UI', 'Inter', system-ui, sans-serif !important;
+    max-width: 100% !important;
+}
+.dark .gradio-container { background: #1a1a2e !important; }
+
+/* Panel backgrounds */
+.gr-panel, .gr-box, .gr-form, .gr-accordion,
+div[class*="block"], div[class*="panel"] {
+    background: #16213e !important;
+    border-color: #2a2a4a !important;
+}
+
+/* Input fields */
+input, textarea, select, .gr-input, .gr-text-input {
+    background: #0f0f23 !important;
+    color: #e0e0e0 !important;
+    border-color: #3a3a5c !important;
+}
+
+/* Buttons */
+button.primary, button[class*="primary"] {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+    border: none !important;
+    color: white !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 12px rgba(99, 102, 241, 0.3) !important;
+    transition: all 0.2s ease !important;
+}
+button.primary:hover, button[class*="primary"]:hover {
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.5) !important;
+    transform: translateY(-1px) !important;
+}
+button.secondary, button[class*="secondary"] {
+    background: #2a2a4a !important;
+    border: 1px solid #3a3a5c !important;
+    color: #c0c0d0 !important;
+    transition: all 0.2s ease !important;
+}
+button.secondary:hover, button[class*="secondary"]:hover {
+    background: #3a3a5c !important;
+    color: #fff !important;
+}
+
+/* Accordion styling */
+.gr-accordion .label-wrap { color: #a0a0c0 !important; }
+
+/* Labels */
+label, .gr-label, span[data-testid="block-label"] {
+    color: #8888aa !important;
+    font-size: 12px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+}
+
+/* Markdown headers */
+h1, h2, h3, h4 { color: #e0e0ff !important; }
+.markdown-text { color: #b0b0d0 !important; }
+
+/* Header bar */
+#editor-header {
+    background: linear-gradient(90deg, #0f0f23 0%, #16213e 50%, #0f0f23 100%);
+    border-bottom: 1px solid #2a2a4a;
+    padding: 8px 16px;
+    margin-bottom: 8px;
+}
+
+/* Video output */
+video { border-radius: 6px !important; border: 1px solid #2a2a4a !important; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0f0f23; }
+::-webkit-scrollbar-thumb { background: #3a3a5c; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #5a5a7c; }
+
+/* Status bar styling */
+#status-bar textarea {
+    background: #0f0f23 !important;
+    border: 1px solid #2a2a4a !important;
+    color: #7cfc00 !important;
+    font-family: 'Consolas', 'Fira Code', monospace !important;
+    font-size: 12px !important;
+}
+"""
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  Helper Functions
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 def get_image_thumbnail_b64(image_path, max_size=(80, 50)):
     """Return base64 thumbnail data URI for an image."""
     try:
@@ -38,13 +137,16 @@ def get_image_thumbnail_b64(image_path, max_size=(80, 50)):
 
 def build_timeline_html(rows):
     """
-    Build the HTML for the drag-and-drop timeline table.
-    rows: list of dicts with keys: idx, thumb_b64, filename, path, start, duration
+    Build the HTML for the drag-and-drop timeline table styled like a video editor.
+    rows: list of dicts with keys: thumb_b64, filename, path, start, duration
     """
     if not rows:
         return """
-        <div style="text-align:center; padding:40px; color:#888; font-size:14px;">
-            Click <b>"🔄 Populate Table"</b> after uploading images to build your timeline.
+        <div style="display:flex; align-items:center; justify-content:center; height:300px;
+                    color:#555; font-size:14px; flex-direction:column; gap:12px;
+                    background:#0d0d1a; border-radius:8px; border:1px dashed #2a2a4a;">
+            <span style="font-size:40px; opacity:0.4;">🎞️</span>
+            <span>Click <b style="color:#8b5cf6;">Populate Timeline</b> to load your clips</span>
         </div>
         """
 
@@ -55,51 +157,162 @@ def build_timeline_html(rows):
         start = r.get("start", "0.0")
         dur = r.get("duration", "5.0")
         path = r.get("path", "")
-        thumb_img = f'<img src="{thumb}" style="height:44px; border-radius:4px; object-fit:cover;" />' if thumb else '<span style="font-size:20px;">🖼️</span>'
+        thumb_img = (
+            f'<img src="{thumb}" style="height:40px; width:64px; border-radius:3px; object-fit:cover; border:1px solid #3a3a5c;" />'
+            if thumb else
+            '<div style="height:40px; width:64px; background:#1a1a2e; border-radius:3px; display:flex; align-items:center; justify-content:center; border:1px solid #3a3a5c; font-size:16px;">🖼️</div>'
+        )
 
         row_html += f"""
         <tr data-idx="{i}" data-path="{path}" data-filename="{fname}"
-            style="cursor:grab; transition: background 0.15s;"
-            onmouseenter="this.style.background='#e3f0ff'"
-            onmouseleave="this.style.background=''">
-          <td style="width:32px; text-align:center; color:#aaa; font-size:16px; cursor:grab;">⠿</td>
-          <td style="padding:4px 6px; text-align:center;">{thumb_img}</td>
-          <td style="padding:4px 8px; font-size:13px; font-family:monospace; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{fname}</td>
-          <td style="padding:4px 6px;">
-            <input type="text" value="{start}" data-field="start"
-                   style="width:70px; padding:3px 6px; border:1px solid #ccc; border-radius:4px; font-size:13px; text-align:center; font-family:monospace;"
+            class="tl-row">
+          <td class="tl-cell tl-handle">⠿</td>
+          <td class="tl-cell" style="text-align:center; width:72px;">{i + 1}</td>
+          <td class="tl-cell" style="text-align:center; width:80px;">{thumb_img}</td>
+          <td class="tl-cell tl-filename">{fname}</td>
+          <td class="tl-cell" style="text-align:center; width:90px;">
+            <input type="text" value="{start}" data-field="start" class="tl-input"
                    onchange="window.__timelineChanged && window.__timelineChanged()" />
           </td>
-          <td style="padding:4px 6px;">
-            <input type="text" value="{dur}" data-field="duration"
-                   style="width:70px; padding:3px 6px; border:1px solid #ccc; border-radius:4px; font-size:13px; text-align:center; font-family:monospace;"
+          <td class="tl-cell" style="text-align:center; width:90px;">
+            <input type="text" value="{dur}" data-field="duration" class="tl-input"
                    onchange="window.__timelineChanged && window.__timelineChanged()" />
           </td>
         </tr>
         """
 
+    total_dur = sum(float(r.get("duration", 0)) for r in rows if r.get("duration"))
+    clip_count = len(rows)
+
     return f"""
-    <table id="timeline-drag-table" style="width:100%; border-collapse:collapse; font-size:14px;">
-      <thead>
-        <tr style="background:#f0f4fa; border-bottom:2px solid #d0d7e3;">
-          <th style="width:32px; padding:6px;"></th>
-          <th style="padding:6px 8px; text-align:center; font-size:12px; color:#555;">Preview</th>
-          <th style="padding:6px 8px; text-align:left; font-size:12px; color:#555;">Filename</th>
-          <th style="padding:6px 8px; text-align:center; font-size:12px; color:#555;">Start (s)</th>
-          <th style="padding:6px 8px; text-align:center; font-size:12px; color:#555;">Duration (s)</th>
-        </tr>
-      </thead>
-      <tbody id="timeline-tbody">
-        {row_html}
-      </tbody>
-    </table>
+    <style>
+      #tl-container {{
+        background: #0d0d1a;
+        border-radius: 8px;
+        border: 1px solid #2a2a4a;
+        overflow: hidden;
+      }}
+      #tl-stats {{
+        display: flex;
+        gap: 24px;
+        padding: 8px 16px;
+        background: #111128;
+        border-bottom: 1px solid #2a2a4a;
+        font-size: 12px;
+        color: #7777aa;
+        font-family: 'Consolas', 'Fira Code', monospace;
+      }}
+      #tl-stats span {{ color: #a78bfa; font-weight: 600; }}
+      #timeline-drag-table {{
+        width: 100%;
+        border-collapse: collapse;
+      }}
+      #timeline-drag-table thead tr {{
+        background: #111128;
+        border-bottom: 1px solid #2a2a4a;
+      }}
+      #timeline-drag-table th {{
+        padding: 8px 10px;
+        text-align: center;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #6666aa;
+        font-weight: 600;
+        user-select: none;
+      }}
+      .tl-row {{
+        cursor: grab;
+        border-bottom: 1px solid #1a1a30;
+        transition: background 0.15s ease;
+      }}
+      .tl-row:hover {{
+        background: #1c1c3a !important;
+      }}
+      .tl-cell {{
+        padding: 6px 8px;
+        vertical-align: middle;
+      }}
+      .tl-handle {{
+        width: 28px;
+        text-align: center;
+        color: #3a3a5c;
+        font-size: 14px;
+        cursor: grab;
+        user-select: none;
+        transition: color 0.15s;
+      }}
+      .tl-row:hover .tl-handle {{ color: #8b5cf6; }}
+      .tl-filename {{
+        font-size: 12px;
+        font-family: 'Consolas', 'Fira Code', monospace;
+        color: #c0c0e0;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }}
+      .tl-input {{
+        width: 68px;
+        padding: 4px 6px;
+        border: 1px solid #2a2a4a;
+        border-radius: 4px;
+        background: #0f0f23;
+        color: #e0e0ff;
+        font-size: 12px;
+        font-family: 'Consolas', 'Fira Code', monospace;
+        text-align: center;
+        outline: none;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }}
+      .tl-input:focus {{
+        border-color: #6366f1;
+        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+      }}
+
+      /* SortableJS ghost/chosen */
+      .sortable-ghost {{
+        background: #2a1a4a !important;
+        opacity: 0.5;
+      }}
+      .sortable-chosen {{
+        background: #1e1e3e !important;
+        box-shadow: 0 0 12px rgba(139, 92, 246, 0.3);
+      }}
+    </style>
+
+    <div id="tl-container">
+      <div id="tl-stats">
+        <div>CLIPS: <span>{clip_count}</span></div>
+        <div>TOTAL: <span>{total_dur:.1f}s</span></div>
+      </div>
+      <div style="max-height:520px; overflow-y:auto;">
+        <table id="timeline-drag-table">
+          <thead>
+            <tr>
+              <th style="width:28px;"></th>
+              <th style="width:72px;">#</th>
+              <th style="width:80px;">Preview</th>
+              <th style="text-align:left;">Filename</th>
+              <th style="width:90px;">Start (s)</th>
+              <th style="width:90px;">Duration (s)</th>
+            </tr>
+          </thead>
+          <tbody id="timeline-tbody">
+            {row_html}
+          </tbody>
+        </table>
+      </div>
+    </div>
     """
 
 
-# JavaScript to initialize SortableJS and sync state back to Gradio via hidden JSON input
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  SortableJS Initializer
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 SORTABLE_INIT_JS = """
 async () => {
-    // Load SortableJS from CDN if not already loaded
     if (!window.Sortable) {
         await new Promise((resolve, reject) => {
             const script = document.createElement('script');
@@ -112,27 +325,18 @@ async () => {
 
     function initSortable() {
         const tbody = document.getElementById('timeline-tbody');
-        if (!tbody) {
-            setTimeout(initSortable, 500);
-            return;
-        }
-        if (tbody._sortableInstance) {
-            tbody._sortableInstance.destroy();
-        }
+        if (!tbody) { setTimeout(initSortable, 500); return; }
+        if (tbody._sortableInstance) tbody._sortableInstance.destroy();
         tbody._sortableInstance = new Sortable(tbody, {
             animation: 200,
-            handle: 'td:first-child',
+            handle: '.tl-handle',
             ghostClass: 'sortable-ghost',
             chosenClass: 'sortable-chosen',
-            onEnd: function() {
-                syncToGradio();
-            }
+            onEnd: function() { syncToGradio(); }
         });
     }
 
-    window.__timelineChanged = function() {
-        syncToGradio();
-    };
+    window.__timelineChanged = function() { syncToGradio(); };
 
     function syncToGradio() {
         const tbody = document.getElementById('timeline-tbody');
@@ -140,47 +344,34 @@ async () => {
         const rows = tbody.querySelectorAll('tr');
         const data = [];
         rows.forEach((tr) => {
-            const startInput = tr.querySelector('input[data-field="start"]');
-            const durInput = tr.querySelector('input[data-field="duration"]');
+            const s = tr.querySelector('input[data-field="start"]');
+            const d = tr.querySelector('input[data-field="duration"]');
             data.push({
                 path: tr.getAttribute('data-path') || '',
                 filename: tr.getAttribute('data-filename') || '',
-                start: startInput ? startInput.value : '0.0',
-                duration: durInput ? durInput.value : '5.0'
+                start: s ? s.value : '0.0',
+                duration: d ? d.value : '5.0'
             });
         });
-        // Write to hidden JSON textarea
-        const hiddenEl = document.querySelector('#timeline-json-bridge textarea');
-        if (hiddenEl) {
-            hiddenEl.value = JSON.stringify(data);
-            hiddenEl.dispatchEvent(new Event('input', { bubbles: true }));
+        const el = document.querySelector('#timeline-json-bridge textarea');
+        if (el) {
+            el.value = JSON.stringify(data);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
         }
     }
 
-    // Add ghost styling
-    if (!document.getElementById('sortable-style')) {
-        const style = document.createElement('style');
-        style.id = 'sortable-style';
-        style.textContent = `
-            .sortable-ghost { background: #dbeafe !important; opacity: 0.6; }
-            .sortable-chosen { background: #bfdbfe !important; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
-            #timeline-drag-table tr td:first-child:hover { color: #2563eb !important; }
-        `;
-        document.head.appendChild(style);
-    }
-
-    // Observe DOM for table re-renders
     const observer = new MutationObserver(() => {
-        if (document.getElementById('timeline-tbody')) {
-            initSortable();
-        }
+        if (document.getElementById('timeline-tbody')) initSortable();
     });
     observer.observe(document.body, { childList: true, subtree: true });
-
     initSortable();
 }
 """
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  Backend Functions
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def populate_timeline(script_mode, script_file, script_text, audio_file, image_mode, images_folder, uploaded_images, mapping_mode):
     """Populate the timeline from uploaded images. Returns (html, json_data)."""
@@ -198,8 +389,7 @@ def populate_timeline(script_mode, script_file, script_text, audio_file, image_m
         elif image_mode == "Upload Image Files" and uploaded_images:
             images_source = [f.name if hasattr(f, "name") else f for f in uploaded_images]
         else:
-            empty_html = build_timeline_html([])
-            return empty_html, "[]"
+            return build_timeline_html([]), "[]"
 
         audio_dur = 0.0
         if audio_file and os.path.exists(audio_file):
@@ -232,7 +422,7 @@ def populate_timeline(script_mode, script_file, script_text, audio_file, image_m
         json_data = json.dumps([{"path": r["path"], "filename": r["filename"], "start": r["start"], "duration": r["duration"]} for r in rows])
         return html, json_data
     except Exception as e:
-        error_html = f'<div style="color:red; padding:12px;">❌ Error: {str(e)}</div>'
+        error_html = f'<div style="color:#ff6b6b; padding:16px; background:#1a0a0a; border-radius:8px;">❌ {str(e)}</div>'
         return error_html, "[]"
 
 
@@ -307,19 +497,10 @@ def sort_by_timestamp(json_str):
 
 
 def run_gradio_generation(
-    script_mode,
-    script_file,
-    script_text,
-    audio_file,
-    image_mode,
-    images_folder,
-    uploaded_images,
-    res_str,
-    fps,
-    transition,
-    mapping_mode,
-    timeline_json_str,
-    progress=gr.Progress()
+    script_mode, script_file, script_text, audio_file,
+    image_mode, images_folder, uploaded_images,
+    res_str, fps, transition, mapping_mode,
+    timeline_json_str, progress=gr.Progress()
 ):
     try:
         # 1. Resolve Script Source (Optional)
@@ -364,7 +545,6 @@ def run_gradio_generation(
                     for r in tl_rows:
                         fname = r.get("filename", "").strip()
                         if fname and "Please select" not in fname and "Error:" not in fname:
-                            # Build row as [preview_placeholder, filename, start, duration]
                             valid_rows.append(["", fname, r.get("start", "0.0"), r.get("duration", "5.0")])
                     if valid_rows:
                         custom_tl = valid_rows
@@ -390,7 +570,7 @@ def run_gradio_generation(
             custom_timeline=custom_tl
         )
 
-        return result_video, f"✅ Video successfully generated and saved to: {result_video}"
+        return result_video, f"✅ Export complete → {result_video}"
 
     except Exception as e:
         import traceback
@@ -398,73 +578,56 @@ def run_gradio_generation(
         return None, f"❌ Error: {str(e)}"
 
 
-# Handle Gradio theme compatibility between v4/v5 (Kaggle) and v6+ (Local)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  Build the Gradio Video Editor UI
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 try:
     GRADIO_V6 = int(gr.__version__.split(".")[0]) >= 6
 except Exception:
     GRADIO_V6 = False
 
-blocks_kwargs: dict[str, Any] = {"title": "Salt-2-Artstyle Video Generator"}
+blocks_kwargs: dict[str, Any] = {
+    "title": "Salt Video Editor",
+    "css": EDITOR_CSS,
+}
 if not GRADIO_V6:
     blocks_kwargs["theme"] = gr.themes.Default()  # type: ignore
 
-# Build Gradio Interface
 with gr.Blocks(**blocks_kwargs) as demo:
-    gr.Markdown(
-        """
-        # 🎬 Automated Video Generator with Ken Burns Effects & Audio Sync
-        Generate engaging, dynamic videos from script timestamps, audio, and images.
-        """
-    )
 
-    with gr.Row():
-        # ─── LEFT PANEL: Settings (compact) ───
-        with gr.Column(scale=3, min_width=320):
-            with gr.Accordion("📝 Script & Timestamps (Optional)", open=False):
-                script_mode = gr.Radio(
-                    choices=["Paste Text", "Upload File", "No Script (Automatic / Manual)"],
-                    value="Paste Text",
-                    label="Script Input Method"
-                )
-                script_text = gr.Textbox(
-                    label="Script Text (with [MM:SS - MM:SS] timestamps)",
-                    value=DEFAULT_SCRIPT_TEXT,
-                    lines=8,
-                    placeholder="TITLE: My Video\n\n[00:00 - 00:08]\nWelcome to my video..."
-                )
-                script_file = gr.File(
-                    label="Upload Script (.txt)",
-                    file_types=[".txt"],
-                    visible=False
-                )
+    # ─── HEADER BAR ───
+    gr.HTML("""
+    <div id="editor-header" style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:22px;">🎬</span>
+            <span style="font-size:16px; font-weight:700; color:#e0e0ff; letter-spacing:1px;">SALT VIDEO EDITOR</span>
+            <span style="font-size:11px; color:#5555aa; padding-left:8px;">Ken Burns · GPU Accelerated</span>
+        </div>
+        <div style="font-size:11px; color:#4444aa; font-family:monospace;">v2.0</div>
+    </div>
+    """)
 
-                def toggle_script_mode(mode):
-                    return {
-                        script_text: gr.update(visible=(mode == "Paste Text")),
-                        script_file: gr.update(visible=(mode == "Upload File"))
-                    }
+    with gr.Row(equal_height=False):
 
-                script_mode.change(toggle_script_mode, inputs=[script_mode], outputs=[script_text, script_file])
+        # ━━━━ LEFT SIDEBAR: Media & Settings ━━━━
+        with gr.Column(scale=3, min_width=300):
 
-            with gr.Accordion("🔊 Audio Narration", open=True):
-                audio_file = gr.Audio(
-                    label="Audio File (.wav, .mp3)",
-                    type="filepath",
-                    value=DEFAULT_AUDIO_PATH if os.path.exists(DEFAULT_AUDIO_PATH) else None
-                )
-
-            with gr.Accordion("🖼️ Images", open=True):
+            # ── Media Bin ──
+            with gr.Accordion("🖼️  MEDIA BIN", open=True):
                 image_mode = gr.Radio(
                     choices=["Select Local Folder", "Upload Image Files"],
                     value="Select Local Folder",
-                    label="Image Input Method"
+                    label="Source",
+                    container=False
                 )
                 images_folder = gr.Textbox(
-                    label="Local Images Directory Path",
-                    value=DEFAULT_IMAGES_DIR
+                    label="Folder Path",
+                    value=DEFAULT_IMAGES_DIR,
+                    lines=1
                 )
                 uploaded_images = gr.File(
-                    label="Upload Multiple Image Files",
+                    label="Drop images here",
                     file_count="multiple",
                     file_types=["image"],
                     visible=False
@@ -478,56 +641,121 @@ with gr.Blocks(**blocks_kwargs) as demo:
 
                 image_mode.change(toggle_image_mode, inputs=[image_mode], outputs=[images_folder, uploaded_images])
 
-            with gr.Accordion("⚙️ Video Settings", open=True):
-                res_dropdown = gr.Dropdown(
-                    choices=["1920x1080", "1280x720", "854x480", "1080x1920"],
-                    value="1920x1080",
-                    label="Resolution"
-                )
-                fps_dropdown = gr.Dropdown(
-                    choices=[60, 30, 24],
-                    value=60,
-                    label="FPS"
-                )
-                mapping_radio = gr.Radio(
-                    choices=["index", "sequential"],
-                    value="index",
-                    label="Mapping Strategy"
-                )
-                transition_slider = gr.Slider(
-                    minimum=0.0, maximum=1.0, value=0.4, step=0.1,
-                    label="Transition Duration (s)"
+            # ── Audio Track ──
+            with gr.Accordion("🔊  AUDIO TRACK", open=True):
+                audio_file = gr.Audio(
+                    label="Narration / Music",
+                    type="filepath",
+                    value=DEFAULT_AUDIO_PATH if os.path.exists(DEFAULT_AUDIO_PATH) else None
                 )
 
-            generate_btn = gr.Button("🎬 Generate Video", variant="primary", size="lg")
+            # ── Script ──
+            with gr.Accordion("📝  SCRIPT & TIMESTAMPS", open=False):
+                script_mode = gr.Radio(
+                    choices=["Paste Text", "Upload File", "No Script"],
+                    value="Paste Text",
+                    label="Input Method",
+                    container=False
+                )
+                script_text = gr.Textbox(
+                    label="Script with [MM:SS] timestamps",
+                    value=DEFAULT_SCRIPT_TEXT,
+                    lines=6,
+                    placeholder="[00:00 - 00:08]\nWelcome to my video..."
+                )
+                script_file = gr.File(
+                    label="Upload .txt",
+                    file_types=[".txt"],
+                    visible=False
+                )
 
-            output_status = gr.Textbox(label="Status", interactive=False)
-            output_video = gr.Video(label="Generated Video")
+                def toggle_script_mode(mode):
+                    return {
+                        script_text: gr.update(visible=(mode == "Paste Text")),
+                        script_file: gr.update(visible=(mode == "Upload File"))
+                    }
 
-        # ─── RIGHT PANEL: Timeline Table (main working area) ───
+                script_mode.change(toggle_script_mode, inputs=[script_mode], outputs=[script_text, script_file])
+
+            # ── Export Settings ──
+            with gr.Accordion("⚙️  EXPORT SETTINGS", open=False):
+                with gr.Row():
+                    res_dropdown = gr.Dropdown(
+                        choices=["1920x1080", "1280x720", "854x480", "1080x1920"],
+                        value="1920x1080",
+                        label="Resolution"
+                    )
+                    fps_dropdown = gr.Dropdown(
+                        choices=[60, 30, 24],
+                        value=60,
+                        label="FPS"
+                    )
+                with gr.Row():
+                    mapping_radio = gr.Radio(
+                        choices=["index", "sequential"],
+                        value="index",
+                        label="Mapping",
+                        container=False
+                    )
+                    transition_slider = gr.Slider(
+                        minimum=0.0, maximum=1.0, value=0.4, step=0.1,
+                        label="Transition (s)"
+                    )
+
+        # ━━━━ RIGHT MAIN AREA: Timeline + Preview ━━━━
         with gr.Column(scale=7, min_width=500):
-            gr.Markdown("### 🕒 Cinematic Timeline — Drag & Drop to Reorder")
-            gr.Markdown(
-                "Click **Populate Table** to load your images. **Drag rows by the ⠿ handle** to reorder. "
-                "Edit Start and Duration directly in the cells."
-            )
+
+            # ── Timeline Toolbar ──
+            gr.HTML("""
+            <div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #2a2a4a; margin-bottom:8px;">
+                <span style="font-size:13px; font-weight:700; color:#a78bfa; letter-spacing:1px; text-transform:uppercase;">
+                    ✂️ Timeline
+                </span>
+                <span style="font-size:11px; color:#4a4a7a; margin-left:auto;">
+                    Drag ⠿ to reorder · Edit start/duration inline
+                </span>
+            </div>
+            """)
 
             with gr.Row():
-                populate_btn = gr.Button("🔄 Populate Table", variant="primary")
-                sort_btn = gr.Button("🔢 Sort by Timestamp", variant="secondary")
-                equalize_btn = gr.Button("⏱️ Equalize Durations", variant="secondary")
+                populate_btn = gr.Button("🔄 Populate Timeline", variant="primary", size="sm")
+                sort_btn = gr.Button("🔢 Sort by Time", variant="secondary", size="sm")
+                equalize_btn = gr.Button("⏱️ Equalize", variant="secondary", size="sm")
 
+            # ── Drag-and-Drop Timeline Table ──
             timeline_html = gr.HTML(
                 value=build_timeline_html([]),
                 label="Timeline"
             )
 
-            # Hidden JSON bridge to sync drag-and-drop state from JS to Python
+            # Hidden JSON bridge
             timeline_json_bridge = gr.Textbox(
                 value="[]",
                 visible=False,
                 elem_id="timeline-json-bridge"
             )
+
+            # ── Export & Preview ──
+            gr.HTML("""
+            <div style="border-top:1px solid #2a2a4a; margin-top:12px; padding-top:10px;">
+                <span style="font-size:13px; font-weight:700; color:#a78bfa; letter-spacing:1px; text-transform:uppercase;">
+                    📺 Preview & Export
+                </span>
+            </div>
+            """)
+
+            generate_btn = gr.Button("🎬  RENDER VIDEO", variant="primary", size="lg")
+
+            with gr.Row():
+                with gr.Column(scale=7):
+                    output_video = gr.Video(label="Preview")
+                with gr.Column(scale=3):
+                    output_status = gr.Textbox(
+                        label="Console",
+                        interactive=False,
+                        lines=4,
+                        elem_id="status-bar"
+                    )
 
     # ─── Wire up event handlers ───
 
@@ -565,12 +793,12 @@ with gr.Blocks(**blocks_kwargs) as demo:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Launch Gradio Web UI for Salt-2-Artstyle")
+    parser = argparse.ArgumentParser(description="Launch Salt Video Editor")
     parser.add_argument("--share", action="store_true", help="Create a publicly shareable Gradio link (recommended on Kaggle!)")
     parser.add_argument("--port", type=int, default=7860, help="Port to run the server on")
     args = parser.parse_args()
 
-    print(f"\nLaunching Gradio Interface (Share={args.share}, Port={args.port}, Gradio v{gr.__version__})...")
+    print(f"\nLaunching Salt Video Editor (Share={args.share}, Port={args.port}, Gradio v{gr.__version__})...")
     launch_kwargs: dict[str, Any] = {"share": args.share, "server_port": args.port}
     if GRADIO_V6:
         launch_kwargs["theme"] = gr.themes.Default()  # type: ignore
