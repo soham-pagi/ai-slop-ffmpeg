@@ -132,14 +132,29 @@ def generate_video(
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
     codec, preset, threads = get_optimal_video_settings()
-    final_video.write_videofile(
-        output_path,
-        fps=fps,
-        codec=codec,
-        audio_codec="aac",
-        threads=threads,
-        preset=preset
-    )
+    try:
+        final_video.write_videofile(
+            output_path,
+            fps=fps,
+            codec=codec,
+            audio_codec="aac",
+            threads=threads,
+            preset=preset
+        )
+    except Exception as e:
+        if codec != "libx264":
+            print(f"\n[Warning] Hardware GPU encoding ({codec}) failed in MoviePy backend: {str(e)[:150]}...")
+            print("          -> Automatically falling back to high-speed CPU multi-threading (libx264, preset=superfast)!\n")
+            final_video.write_videofile(
+                output_path,
+                fps=fps,
+                codec="libx264",
+                audio_codec="aac",
+                threads=threads,
+                preset="superfast"
+            )
+        else:
+            raise
 
     if progress_callback:
         progress_callback(1.0, "Video generation complete!")
