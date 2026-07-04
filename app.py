@@ -99,6 +99,24 @@ def run_gradio_generation(
         return None, f"❌ Error: {str(e)}"
 
 
+import base64
+from PIL import Image
+import io
+
+def get_image_thumbnail_html(image_path, max_size=(100, 60)):
+    try:
+        if not os.path.exists(image_path):
+            return "🖼️ [Missing]"
+        with Image.open(image_path) as img:
+            img.thumbnail(max_size)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=75)
+            b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+            return f'<img src="data:image/jpeg;base64,{b64}" style="max-height: 50px; border-radius: 4px; display: inline-block;" />'
+    except Exception:
+        return "🖼️ [Image]"
+
+
 def populate_timeline_table(script_mode, script_file, script_text, audio_file, image_mode, images_folder, uploaded_images, mapping_mode):
     try:
         from src.image_mapper import get_image_files, map_images_to_timestamps
@@ -114,7 +132,7 @@ def populate_timeline_table(script_mode, script_file, script_text, audio_file, i
         elif image_mode == "Upload Image Files" and uploaded_images:
             images_source = [f.name if hasattr(f, "name") else f for f in uploaded_images]
         else:
-            return [[1, "Please select/upload images first", 5.0]]
+            return [["🖼️", "Please select/upload images first", "0.0", "5.0"]]
             
         audio_dur = 0.0
         if audio_file and os.path.exists(audio_file):
@@ -134,11 +152,12 @@ def populate_timeline_table(script_mode, script_file, script_text, audio_file, i
         mapped = map_images_to_timestamps(images_source, timestamps=timestamps, mode=mapping_mode, audio_duration=audio_dur)
         
         rows = []
-        for i, mc in enumerate(mapped):
-            rows.append([i + 1, os.path.basename(mc.image_path), round(mc.duration, 2)])
+        for mc in mapped:
+            thumb_html = get_image_thumbnail_html(mc.image_path)
+            rows.append([thumb_html, os.path.basename(mc.image_path), str(round(mc.start_time, 2)), str(round(mc.duration, 2))])
         return rows
     except Exception as e:
-        return [[1, f"Error: {str(e)}", 5.0]]
+        return [["❌", f"Error: {str(e)}", "0.0", "5.0"]]
 
 
 def equalize_table_durations(audio_file, table_data):
@@ -158,9 +177,13 @@ def equalize_table_durations(audio_file, table_data):
             dur = round(audio_dur / len(table_data), 2) if len(table_data) > 0 else 5.0
             
         new_rows = []
-        for i, row in enumerate(table_data):
+        curr_t = 0.0
+        for row in table_data:
             if len(row) >= 2:
-                new_rows.append([i + 1, row[1], dur])
+                thumb = row[0]
+                fname = row[1]
+                new_rows.append([thumb, fname, str(round(curr_t, 2)), str(dur)])
+                curr_t += dur
         return new_rows
     except Exception:
         return table_data
@@ -280,7 +303,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
                     equalize_btn = gr.Button("⏱️ Equalize Durations to Audio", variant="secondary")
                 
                 timeline_table = gr.Dataframe(
-                    headers=["Order", "Image Filename", "Duration (s)"],
+                    headers=["Preview", "Image Filename", "Start Timestamp (s)", "Duration (s) (Optional)"],
                     interactive=True,
                     label="Custom Timeline Table"
                 )

@@ -157,51 +157,154 @@ def map_images_to_timestamps(
     return mapped_clips
 
 
+def parse_time_str(val: Any) -> Optional[float]:
+    if val is None or str(val).strip() == "" or "Please select" in str(val) or "Error:" in str(val):
+        return None
+    s = str(val).strip()
+    if ":" in s:
+        parts = s.split(":")
+        try:
+            if len(parts) == 2:
+                return float(parts[0]) * 60 + float(parts[1])
+            elif len(parts) == 3:
+                return float(parts[0]) * 3600 + float(parts[1]) * 60 + float(parts[2])
+        except ValueError:
+            return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def find_matching_image(filename: str, image_paths: List[str], path_map: dict) -> str:
+    if not filename:
+        return image_paths[0]
+    fname_clean = filename.strip()
+    
+    # 1. Exact match (case-sensitive)
+    if fname_clean in path_map:
+        return path_map[fname_clean]
+        
+    # 2. Case-insensitive exact match
+    for base, full in path_map.items():
+        if base.lower() == fname_clean.lower():
+            return full
+            
+    # 3. Substring match (e.g. user typed "dog" for "my_dog_photo.png" or "1.png" for "prefix_1.png")
+    for base, full in path_map.items():
+        if fname_clean.lower() in base.lower():
+            return full
+            
+    # 4. Numeric / Index match (e.g. user typed "1", "2", "3" or "#1", "image 1")
+    import re
+    nums = re.findall(r'\d+', fname_clean)
+    if nums:
+        try:
+            idx = int(nums[0]) - 1 # 1-based to 0-based
+            if 0 <= idx < len(image_paths):
+                return image_paths[idx]
+        except Exception:
+            pass
+            
+    # 5. Fallback to first image
+    print(f"[Warning] Could not find exact match for image '{filename}'. Defaulting to first image: {os.path.basename(image_paths[0])}")
+    return image_paths[0]
+
+
 def create_custom_timeline(
     images_source: Union[str, List[str]],
-    timeline_rows: List[List[Any]]
+    timeline_rows: List[List[Any]],
+    audio_duration: float = 0.0
 ) -> List[MappedClip]:
     """
-    Creates a MappedClip timeline from manual Dataframe rows: [[order, filename, duration], ...].
+    Creates a MappedClip timeline from manual Dataframe rows.
+    Supports both legacy format: [[order, filename, duration], ...]
+    and new format: [[preview_html, filename, start_timestamp, duration], ...]
     """
     image_paths = get_image_files(images_source)
     if not image_paths:
         raise ValueError(f"No valid image files found in {images_source}")
         
-    # Build lookup map from filename to full path
     path_map = {os.path.basename(p): p for p in image_paths}
     
-    mapped_clips = []
-    curr_time = 0.0
-    
-    for i, row in enumerate(timeline_rows):
-        if not row or len(row) < 3:
-            continue
-        filename = str(row[1]).strip()
-        try:
-            duration = float(row[2])
-        except (ValueError, TypeError):
-            duration = 5.0
-            
-        if duration <= 0:
+    # 1. Parse rows into structured list: (filename, start_val, dur_val)
+    parsed_items = []
+    for row in timeline_rows:
+        if not row or len(row) < 2:
             continue
             
-        # Find matching image path (or fallback to first image if deleted/renamed)
-        img_path = path_map.get(filename, image_paths[0])
+        if len(row) == 3:
+            # Check if column 0 is HTML preview or integer order
+            if isinstance(row[0], str) and "<img" in str(row[0]):
+                # [preview, filename, start_or_duration]
+                filename = str(row[1]).strip()
+                start_val = parse_time_str(row[2])
+                dur_val = None
+            else:
+                # Legacy [order, filename, duration]
+                filename = str(row[1]).strip()
+                start_val = None
+                dur_val = parse_time_str(row[2])
+        elif len(row) >= 4:
+            # [preview, filename, start_timestamp, duration]
+            filename = str(row[1]).strip()
+            start_val = parse_time_str(row[2])
+            dur_val = parse_time_str(row[3])
+        else:
+            continue
+            
+        if not filename or "Please select" in filename or "Error:" in filename:
+            continue
+            
+        parsed_items.append((filename, start_val, dur_val))
         
+    if not parsed_items:
+        raise ValueError("Custom timeline resulted in 0 valid rows. Please check table data.")
+
+    # 2. Compute start_time for each row
+    start_times = []
+    curr_t = 0.0
+    for i, (fname, s_val, d_val) in enumerate(parsed_items):
+        if s_val is not None and s_val >= 0:
+            start_times.append(s_val)
+            curr_t = s_val
+        else:
+            start_times.append(curr_t)
+            # If dur_val provided, advance curr_t for next fallback
+            if d_val is not None and d_val > 0:
+                curr_t += d_val
+            else:
+                curr_t += 5.0
+
+    # 3. Compute duration for each row and build MappedClips
+    mapped_clips = []
+    num_items = len(parsed_items)
+    for i, (fname, s_val, d_val) in enumerate(parsed_items):
+        st = start_times[i]
+        
+        # Determine duration
+        if d_val is not None and d_val > 0:
+            dur = d_val
+        elif i + 1 < num_items and start_times[i+1] > st:
+            dur = start_times[i+1] - st
+        elif i == num_items - 1 and audio_duration > st:
+            dur = audio_duration - st
+        else:
+            dur = 5.0
+            
+        if dur <= 0:
+            dur = 5.0
+            
+        img_path = find_matching_image(fname, image_paths, path_map)
         mapped_clips.append(
             MappedClip(
                 image_path=img_path,
-                duration=duration,
+                duration=dur,
                 segment_index=i + 1,
                 text=f"Manual Segment {i+1}",
-                start_time=curr_time,
-                end_time=curr_time + duration
+                start_time=st,
+                end_time=st + dur
             )
         )
-        curr_time += duration
-        
-    if not mapped_clips:
-        raise ValueError("Custom timeline resulted in 0 valid clips. Please check table durations.")
         
     return mapped_clips

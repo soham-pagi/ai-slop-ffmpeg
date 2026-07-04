@@ -75,7 +75,7 @@ def generate_video(
         print(f"[1/5 & 2/5] Using Custom Manual Image Alignment Timeline ({len(custom_timeline)} rows)...")
         if progress_callback:
             progress_callback(0.2, "Building custom timeline from manual table...")
-        mapped_clips = create_custom_timeline(images_source, custom_timeline)
+        mapped_clips = create_custom_timeline(images_source, custom_timeline, audio_duration=audio_duration)
         print(f"      -> Generated {len(mapped_clips)} clip assignments from manual table.")
     elif script_source and script_source.strip():
         if progress_callback:

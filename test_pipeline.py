@@ -42,7 +42,19 @@ def test_pipeline():
     print(f"Total Custom Clips: {len(mapped_custom)}")
     assert len(mapped_custom) == 2, f"Expected 2 custom clips, got {len(mapped_custom)}"
     assert mapped_custom[0].duration == 10.0 and mapped_custom[1].duration == 15.0, "Custom durations mismatch!"
-    print("Image Mapper (Custom Timeline Table): PASSED\n")
+
+    # Test 4-column format with HTML preview and Start Timestamps
+    smart_rows = [
+        ["<img src='...'>", "1", "0:00", ""],
+        ["<img src='...'>", "2", "0:08", ""],
+        ["<img src='...'>", "3", "0:15", ""]
+    ]
+    mapped_smart = create_custom_timeline(images_dir, smart_rows, audio_duration=30.0)
+    assert len(mapped_smart) == 3, f"Expected 3 smart clips, got {len(mapped_smart)}"
+    assert mapped_smart[0].duration == 8.0, f"Expected 8.0s, got {mapped_smart[0].duration}"
+    assert mapped_smart[1].duration == 7.0, f"Expected 7.0s, got {mapped_smart[1].duration}"
+    assert mapped_smart[2].duration == 15.0, f"Expected 15.0s, got {mapped_smart[2].duration}"
+    print("Image Mapper (Custom Timeline Table & Smart Timestamps): PASSED\n")
 
     print("=== Testing Ken Burns Animation & Frame Generator ===")
     sample_clip = mapped_clips[0]
