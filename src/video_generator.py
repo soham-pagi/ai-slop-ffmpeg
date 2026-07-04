@@ -143,7 +143,7 @@ def generate_video(
     is_script_text: bool = False,
     progress_callback: Optional[Callable] = None,
     custom_timeline: Optional[List[list]] = None,
-    effect_strategy: str = "Random (No Repeats)",
+    effect_strategy: str = "Random (No Consecutive Repeats)",
     transition_style: str = "Cross-Dissolve (Hollywood Blend)"
 ):
     """
@@ -214,7 +214,7 @@ def generate_video(
         pool = ["pan_up_right_zoom_in", "pan_down_left_zoom_in", "pan_right_zoom_in", "pan_left_zoom_in", "zoom_in_fast_slow"]
     elif effect_strategy == "Cycle All (Ordered)":
         pool = all_effects
-    else:  # "Random (No Repeats)" or default
+    else:  # "Random (No Consecutive Repeats)" or default
         pool = all_effects
 
     video_clips = []

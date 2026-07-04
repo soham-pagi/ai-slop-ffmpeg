@@ -586,7 +586,7 @@ def run_gradio_generation(
     script_mode, script_file, script_text, audio_file,
     image_mode, images_folder, uploaded_images,
     res_str, fps, transition, mapping_mode,
-    timeline_json_str, effect_strategy="Random (No Repeats)", transition_style="Cross-Dissolve (Hollywood Blend)", progress=gr.Progress()
+    timeline_json_str, effect_strategy="Random (No Consecutive Repeats)", transition_style="Cross-Dissolve (Hollywood Blend)", progress=gr.Progress()
 ):
     try:
         # 1. Resolve Script Source (Optional)
@@ -807,8 +807,8 @@ with gr.Blocks(**blocks_kwargs) as demo:
                         label="Transition Style"
                     )
                     effect_strategy_dropdown = gr.Dropdown(
-                        choices=["Random (No Repeats)", "Cycle All (Ordered)", "Zoom Only", "Pan Only", "Dynamic Diagonals"],
-                        value="Random (No Repeats)",
+                        choices=["Random (No Consecutive Repeats)", "Cycle All (Ordered)", "Zoom Only", "Pan Only", "Dynamic Diagonals"],
+                        value="Random (No Consecutive Repeats)",
                         label="Effect Strategy"
                     )
 
