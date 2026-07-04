@@ -1,7 +1,10 @@
 import os
 import subprocess
 from typing import Union, List, Optional, Callable
-from moviepy import concatenate_videoclips, AudioFileClip
+try:
+    from moviepy import concatenate_videoclips, AudioFileClip
+except ImportError:
+    from moviepy.editor import concatenate_videoclips, AudioFileClip
 from .timestamp_parser import parse_script, parse_script_text
 from .image_mapper import map_images_to_timestamps
 from .effects import create_ken_burns_clip

@@ -1,7 +1,12 @@
 import numpy as np
 from PIL import Image
-from moviepy import VideoClip
-import moviepy.video.fx as vfx
+try:
+    from moviepy import VideoClip
+    import moviepy.video.fx as vfx
+    MOVIEPY_V2 = True
+except ImportError:
+    from moviepy.editor import VideoClip, vfx
+    MOVIEPY_V2 = False
 from typing import cast
 
 
@@ -93,26 +98,34 @@ def create_ken_burns_clip(
 
     clip = VideoClip(make_frame, duration=duration)
     
-    # In MoviePy v2, set fps and apply fade effects
+    # In MoviePy v1 vs v2, set fps and apply fade effects
     if hasattr(clip, "with_fps"):
         clip = clip.with_fps(fps)
+    elif hasattr(clip, "set_fps"):
+        clip = clip.set_fps(fps)
     else:
         setattr(clip, "fps", fps)
 
-    # Apply smooth cinematic fade in/out transitions
-    effects = []
+    # Apply smooth cinematic fade in/out transitions (compatible with MoviePy 1.x and 2.x)
+    fade_dur = 0.0
     if transition_duration > 0 and duration > transition_duration * 2:
-        effects.append(vfx.FadeIn(transition_duration))
-        effects.append(vfx.FadeOut(transition_duration))
+        fade_dur = transition_duration
     elif transition_duration > 0 and duration > transition_duration:
-        effects.append(vfx.FadeIn(duration / 3.0))
-        effects.append(vfx.FadeOut(duration / 3.0))
+        fade_dur = duration / 3.0
 
-    if effects:
-        if hasattr(clip, "with_effects"):
-            clip = clip.with_effects(effects)
-        elif hasattr(clip, "fx"):
-            for fx_func in effects:
-                clip = clip.fx(fx_func)
+    if fade_dur > 0:
+        if MOVIEPY_V2 and hasattr(vfx, "FadeIn"):
+            effects = [vfx.FadeIn(fade_dur), vfx.FadeOut(fade_dur)]
+            if hasattr(clip, "with_effects"):
+                clip = clip.with_effects(effects)
+            elif hasattr(clip, "fx"):
+                for fx_func in effects:
+                    clip = clip.fx(fx_func)
+        else:
+            # MoviePy 1.x fallback
+            if hasattr(clip, "fadein"):
+                clip = clip.fadein(fade_dur)
+            if hasattr(clip, "fadeout"):
+                clip = clip.fadeout(fade_dur)
 
     return cast(VideoClip, clip)
