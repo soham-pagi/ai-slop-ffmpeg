@@ -30,7 +30,6 @@ def run_gradio_generation(
     transition,
     mapping_mode,
     timeline_table,
-    reorder_gallery=None,
     progress=gr.Progress()
 ):
     try:
@@ -47,10 +46,7 @@ def run_gradio_generation(
         audio_path = audio_file if audio_file else ""
 
         # 3. Resolve Image Source
-        gallery_paths = extract_image_paths_from_gallery(reorder_gallery) if reorder_gallery else []
-        if gallery_paths and len(gallery_paths) > 0:
-            images_source = gallery_paths
-        elif image_mode == "Select Local Folder":
+        if image_mode == "Select Local Folder":
             if not images_folder or not os.path.exists(images_folder):
                 raise ValueError(f"Images folder does not exist: {images_folder}")
             images_source = images_folder
@@ -177,41 +173,48 @@ def populate_timeline_table(script_mode, script_file, script_text, audio_file, i
             
         mapped = map_images_to_timestamps(images_source, timestamps=timestamps, mode=mapping_mode, audio_duration=audio_dur)
         
-        gallery_paths = [mc.image_path for mc in mapped]
         rows = []
         for mc in mapped:
             thumb_html = get_image_thumbnail_html(mc.image_path)
             rows.append([thumb_html, os.path.basename(mc.image_path), str(round(mc.start_time, 2)), str(round(mc.duration, 2))])
-        return gallery_paths, rows
-    except Exception as e:
-        return [], [["❌", f"Error: {str(e)}", "0.0", "5.0"]]
-
-
-def sync_table_from_gallery(audio_file, gallery_data):
-    try:
-        paths = extract_image_paths_from_gallery(gallery_data)
-        if not paths:
-            return [["🖼️", "No images in gallery to sync", "0.0", "5.0"]]
-            
-        audio_dur = 0.0
-        if audio_file and os.path.exists(audio_file):
-            try:
-                from moviepy import AudioFileClip
-                clip = AudioFileClip(audio_file)
-                audio_dur = clip.duration or 0.0
-            except Exception:
-                pass
-                
-        dur = round(audio_dur / len(paths), 2) if (audio_dur > 0 and len(paths) > 0) else 5.0
-        rows = []
-        curr_t = 0.0
-        for p in paths:
-            thumb_html = get_image_thumbnail_html(p)
-            rows.append([thumb_html, os.path.basename(p), str(round(curr_t, 2)), str(dur)])
-            curr_t += dur
         return rows
     except Exception as e:
-        return [["❌", f"Error syncing: {str(e)}", "0.0", "5.0"]]
+        return [["❌", f"Error: {str(e)}", "0.0", "5.0"]]
+
+
+def move_row_up(table_data, selected_idx):
+    try:
+        if not table_data or selected_idx <= 0 or selected_idx >= len(table_data):
+            return table_data, selected_idx
+        table_data[selected_idx], table_data[selected_idx - 1] = table_data[selected_idx - 1], table_data[selected_idx]
+        return table_data, selected_idx - 1
+    except Exception:
+        return table_data, selected_idx
+
+
+def move_row_down(table_data, selected_idx):
+    try:
+        if not table_data or selected_idx < 0 or selected_idx >= len(table_data) - 1:
+            return table_data, selected_idx
+        table_data[selected_idx], table_data[selected_idx + 1] = table_data[selected_idx + 1], table_data[selected_idx]
+        return table_data, selected_idx + 1
+    except Exception:
+        return table_data, selected_idx
+
+
+def sort_by_timestamp(table_data):
+    try:
+        if not table_data:
+            return table_data
+        from src.image_mapper import parse_time_str
+        def get_ts(row):
+            if len(row) >= 3:
+                val = parse_time_str(row[2])
+                return val if val is not None else 999999.0
+            return 999999.0
+        return sorted(table_data, key=get_ts)
+    except Exception:
+        return table_data
 
 
 def equalize_table_durations(audio_file, table_data):
@@ -347,48 +350,59 @@ with gr.Blocks(**blocks_kwargs) as demo:
                     label="Transition Duration (s)"
                 )
 
-            with gr.Accordion("🕒 Manual Image Alignment & Timeline Table (Optional)", open=False):
-                gr.Markdown(
-                    "### 🖼️ Step 1: Drag & Drop Image Reordering\n"
-                    "Click **'🔄 1. Populate Table & Gallery'** below, then drag and drop the image cards in the gallery to put them in your cinematic sequence! "
-                    "When happy with the order, click **'⚡ 2. Sync Table to Drag & Drop Order'**."
-                )
-                reorder_gallery = gr.Gallery(
-                    label="Drag & Drop Images Here to Reorder",
-                    interactive=True,
-                    columns=6,
-                    height=220,
-                    type="filepath",
-                    allow_preview=True
-                )
-                with gr.Row():
-                    populate_btn = gr.Button("🔄 1. Populate Table & Gallery from Uploaded Images", variant="primary")
-                    sync_btn = gr.Button("⚡ 2. Sync Table to Drag & Drop Order", variant="secondary")
-                    equalize_btn = gr.Button("⏱️ 3. Equalize Durations to Audio", variant="secondary")
-                
-                gr.Markdown("### 🕒 Step 2: Fine-Tune Start Timestamps\nSet the exact timestamp (e.g., `0:00`, `0:08`, `0:15`) when each image should appear!")
-                timeline_table = gr.Dataframe(
-                    headers=["Preview", "Image Filename", "Start Timestamp (s)", "Duration (s) (Optional)"],
-                    datatype=["html", "str", "str", "str"], # type: ignore
-                    interactive=True,
-                    label="Custom Timeline Table"
-                )
+            gr.Markdown("### 🕒 5. Cinematic Timeline & Manual Image Alignment Table (Main Working Area)")
+            gr.Markdown(
+                "This is your primary workspace! Click **'🔄 Populate Table'** after selecting/uploading images. "
+                "Click on any row and use **'⬆️ Move Up'** / **'⬇️ Move Down'** to reorder your scene sequence instantly! "
+                "Set Start Timestamps (e.g. `0:00`, `0:08`, `0:15`) to align images precisely to your narration."
+            )
+            with gr.Row():
+                populate_btn = gr.Button("🔄 Populate Table from Uploaded Images", variant="primary")
+                move_up_btn = gr.Button("⬆️ Move Row Up", variant="secondary")
+                move_down_btn = gr.Button("⬇️ Move Row Down", variant="secondary")
+                sort_btn = gr.Button("🔢 Sort by Timestamp", variant="secondary")
+                equalize_btn = gr.Button("⏱️ Equalize Durations", variant="secondary")
+            
+            selected_row_idx = gr.State(-1)
+            timeline_table = gr.Dataframe(
+                headers=["Preview", "Image Filename", "Start Timestamp (s)", "Duration (s) (Optional)"],
+                datatype=["html", "str", "str", "str"], # type: ignore
+                interactive=True,
+                max_height=600,
+                column_widths=[120, 280, 160, 160],
+                label="Main Cinematic Timeline Table"
+            )
 
-                populate_btn.click(
-                    fn=populate_timeline_table,
-                    inputs=[script_mode, script_file, script_text, audio_file, image_mode, images_folder, uploaded_images, mapping_radio],
-                    outputs=[reorder_gallery, timeline_table]
-                )
-                sync_btn.click(
-                    fn=sync_table_from_gallery,
-                    inputs=[audio_file, reorder_gallery],
-                    outputs=[timeline_table]
-                )
-                equalize_btn.click(
-                    fn=equalize_table_durations,
-                    inputs=[audio_file, timeline_table],
-                    outputs=[timeline_table]
-                )
+            def on_row_select(evt: gr.SelectData):
+                return evt.index[0]
+
+            timeline_table.select(fn=on_row_select, outputs=[selected_row_idx])
+
+            populate_btn.click(
+                fn=populate_timeline_table,
+                inputs=[script_mode, script_file, script_text, audio_file, image_mode, images_folder, uploaded_images, mapping_radio],
+                outputs=[timeline_table]
+            )
+            move_up_btn.click(
+                fn=move_row_up,
+                inputs=[timeline_table, selected_row_idx],
+                outputs=[timeline_table, selected_row_idx]
+            )
+            move_down_btn.click(
+                fn=move_row_down,
+                inputs=[timeline_table, selected_row_idx],
+                outputs=[timeline_table, selected_row_idx]
+            )
+            sort_btn.click(
+                fn=sort_by_timestamp,
+                inputs=[timeline_table],
+                outputs=[timeline_table]
+            )
+            equalize_btn.click(
+                fn=equalize_table_durations,
+                inputs=[audio_file, timeline_table],
+                outputs=[timeline_table]
+            )
 
             generate_btn = gr.Button("🎬 Generate Video", variant="primary", size="lg")
 
@@ -403,7 +417,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
             script_mode, script_file, script_text, audio_file,
             image_mode, images_folder, uploaded_images,
             res_dropdown, fps_dropdown, transition_slider, mapping_radio,
-            timeline_table, reorder_gallery
+            timeline_table
         ],
         outputs=[output_video, output_status]
     )
