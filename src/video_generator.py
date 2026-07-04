@@ -53,11 +53,25 @@ def export_video_with_gpu_pipe(final_video, output_path: str, fps: int, progress
     print("="*60 + "\n")
 
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    
+
+    if process.stdin is None:
+        stderr_output = process.stderr.read().decode(errors="replace") if process.stderr else "No stderr available"
+        raise RuntimeError(
+            f"FFmpeg GPU NVENC process failed to start (stdin pipe is None). "
+            f"FFmpeg stderr:\n{stderr_output}"
+        )
+
     total_frames = int(final_video.duration * fps)
     for i, t in enumerate(np.arange(0, final_video.duration, 1.0 / fps)):
         frame = final_video.get_frame(t)
-        process.stdin.write(frame.tobytes())
+        try:
+            process.stdin.write(frame.tobytes())
+        except BrokenPipeError:
+            stderr_output = process.stderr.read().decode(errors="replace") if process.stderr else "No stderr available"
+            raise RuntimeError(
+                f"FFmpeg GPU NVENC pipe broke while writing frame {i}/{total_frames}. "
+                f"FFmpeg stderr:\n{stderr_output}"
+            )
         if progress_callback and total_frames > 0 and i % 15 == 0:
             progress_callback(0.85 + 0.15 * (i / total_frames), f"GPU NVENC Encoding frame {i}/{total_frames}...")
             
