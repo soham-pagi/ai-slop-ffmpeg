@@ -172,7 +172,7 @@ def build_timeline_html(rows):
           <td class="tl-cell tl-filename">{fname}</td>
           <td class="tl-cell" style="text-align:center; width:90px;">
             <input type="text" value="{start}" data-field="start" class="tl-input"
-                   readonly style="opacity:0.6; cursor:default;" title="Auto-calculated from durations" />
+                   onchange="window.__startEdited && window.__startEdited()" />
           </td>
           <td class="tl-cell" style="text-align:center; width:90px;">
             <input type="text" value="{dur}" data-field="duration" class="tl-input"
@@ -336,23 +336,42 @@ async () => {
         });
     }
 
+    // Called on duration edit or drag-reorder: recalculates all start times
     window.__timelineChanged = function() { recalcAndSync(); };
 
+    // Called on manual start edit: just syncs values to Gradio without overwriting starts
+    window.__startEdited = function() { syncOnly(); };
+
+    function pushToGradio(data) {
+        const el = document.querySelector('#timeline-json-bridge textarea');
+        if (el) {
+            const nativeSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLTextAreaElement.prototype, 'value'
+            ).set;
+            nativeSetter.call(el, JSON.stringify(data));
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+
+    function updateStats(rows) {
+        const statsEl = document.getElementById('tl-stats');
+        if (!statsEl) return;
+        let total = 0;
+        rows.forEach(r => { total += parseFloat(r.duration) || 0; });
+        statsEl.innerHTML =
+            '<div>CLIPS: <span>' + rows.length + '</span></div>' +
+            '<div>TOTAL: <span>' + total.toFixed(1) + 's</span></div>';
+    }
+
+    // Recalculate ascending starts from cumulative durations (reorder / duration edit)
     function recalcAndSync() {
         const tbody = document.getElementById('timeline-tbody');
         if (!tbody) return;
         const rows = tbody.querySelectorAll('tr');
         if (rows.length === 0) return;
 
-        // Pass 1: read all durations, and the first row's start
-        let firstStart = 0.0;
-        const firstStartInput = rows[0].querySelector('input[data-field="start"]');
-        if (firstStartInput) {
-            const parsed = parseFloat(firstStartInput.value);
-            if (!isNaN(parsed) && parsed >= 0) firstStart = parsed;
-        }
-
-        let cumulative = firstStart;
+        let cumulative = 0.0;
         const data = [];
         rows.forEach((tr, idx) => {
             const sInput = tr.querySelector('input[data-field="start"]');
@@ -363,14 +382,12 @@ async () => {
                 if (!isNaN(p) && p > 0) dur = p;
             }
 
-            // Set start time = cumulative (auto-calculated)
+            // Auto-assign ascending start time
             if (sInput) sInput.value = cumulative.toFixed(2);
 
-            // Update the order number in the second cell
+            // Update order number
             const cells = tr.querySelectorAll('td');
-            if (cells.length >= 2) {
-                cells[1].textContent = idx + 1;
-            }
+            if (cells.length >= 2) cells[1].textContent = idx + 1;
 
             data.push({
                 path: tr.getAttribute('data-path') || '',
@@ -378,29 +395,38 @@ async () => {
                 start: cumulative.toFixed(2),
                 duration: dur.toString()
             });
-
             cumulative += dur;
         });
 
-        // Update stats bar
-        const statsEl = document.getElementById('tl-stats');
-        if (statsEl) {
-            const totalDur = cumulative - firstStart;
-            statsEl.innerHTML =
-                '<div>CLIPS: <span>' + data.length + '</span></div>' +
-                '<div>TOTAL: <span>' + totalDur.toFixed(1) + 's</span></div>';
-        }
+        updateStats(data);
+        pushToGradio(data);
+    }
 
-        // Push to Gradio hidden bridge using native setter to bypass Svelte controlled input
-        const el = document.querySelector('#timeline-json-bridge textarea');
-        if (el) {
-            const nativeSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLTextAreaElement.prototype, 'value'
-            ).set;
-            nativeSetter.call(el, JSON.stringify(data));
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+    // Sync current values as-is (manual start edit — don't overwrite user's timestamps)
+    function syncOnly() {
+        const tbody = document.getElementById('timeline-tbody');
+        if (!tbody) return;
+        const rows = tbody.querySelectorAll('tr');
+        if (rows.length === 0) return;
+
+        const data = [];
+        rows.forEach((tr, idx) => {
+            const sInput = tr.querySelector('input[data-field="start"]');
+            const dInput = tr.querySelector('input[data-field="duration"]');
+
+            const cells = tr.querySelectorAll('td');
+            if (cells.length >= 2) cells[1].textContent = idx + 1;
+
+            data.push({
+                path: tr.getAttribute('data-path') || '',
+                filename: tr.getAttribute('data-filename') || '',
+                start: sInput ? sInput.value : '0.0',
+                duration: dInput ? dInput.value : '5.0'
+            });
+        });
+
+        updateStats(data);
+        pushToGradio(data);
     }
 
     const observer = new MutationObserver(() => {
@@ -759,7 +785,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
                     ✂️ Timeline
                 </span>
                 <span style="font-size:11px; color:#4a4a7a; margin-left:auto;">
-                    Drag ⠿ to reorder · Edit duration (start auto-calculates)
+                    Drag ⠿ to reorder (auto-recalcs starts) · Edit start/duration inline
                 </span>
             </div>
             """)
