@@ -92,6 +92,40 @@ def create_ken_burns_clip(
             scale = 1.10 + 0.15 * p  # Zoom in 15%
             pan_x = 0.85 - 1.70 * p  # Pan smoothly across 85% of available width from right to left
             pan_y = 0.0
+        elif effect_type == "pan_up_zoom_in":
+            scale = 1.10 + 0.15 * p
+            pan_x = 0.0
+            pan_y = 0.85 - 1.70 * p  # Pan smoothly from bottom to top
+        elif effect_type == "pan_down_zoom_in":
+            scale = 1.10 + 0.15 * p
+            pan_x = 0.0
+            pan_y = -0.85 + 1.70 * p # Pan smoothly from top to bottom
+        elif effect_type == "pan_right_zoom_out":
+            scale = 1.25 - 0.15 * p  # Start zoomed in, zoom out smoothly
+            pan_x = -0.85 + 1.70 * p
+            pan_y = 0.0
+        elif effect_type == "pan_left_zoom_out":
+            scale = 1.25 - 0.15 * p
+            pan_x = 0.85 - 1.70 * p
+            pan_y = 0.0
+        elif effect_type == "pan_up_right_zoom_in":
+            scale = 1.15 + 0.15 * p
+            pan_x = -0.70 + 1.40 * p # Diagonal pan left-to-right
+            pan_y = 0.70 - 1.40 * p  # Diagonal pan bottom-to-top
+        elif effect_type == "pan_down_left_zoom_in":
+            scale = 1.15 + 0.15 * p
+            pan_x = 0.70 - 1.40 * p  # Diagonal pan right-to-left
+            pan_y = -0.70 + 1.40 * p # Diagonal pan top-to-bottom
+        elif effect_type == "zoom_in_fast_slow":
+            p_ease = 1.0 - (1.0 - p) ** 2  # Decelerating cinematic ease-out
+            scale = 1.0 + 0.22 * p_ease
+            pan_x = 0.0
+            pan_y = 0.0
+        elif effect_type == "zoom_out_slow_fast":
+            p_ease = p ** 2  # Accelerating cinematic ease-in
+            scale = 1.22 - 0.22 * p_ease
+            pan_x = 0.0
+            pan_y = 0.0
         else:
             scale = 1.0
             pan_x = 0.0

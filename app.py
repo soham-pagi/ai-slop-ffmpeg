@@ -586,7 +586,7 @@ def run_gradio_generation(
     script_mode, script_file, script_text, audio_file,
     image_mode, images_folder, uploaded_images,
     res_str, fps, transition, mapping_mode,
-    timeline_json_str, progress=gr.Progress()
+    timeline_json_str, effect_strategy="Random (No Repeats)", progress=gr.Progress()
 ):
     try:
         # 1. Resolve Script Source (Optional)
@@ -664,7 +664,8 @@ def run_gradio_generation(
             transition_duration=float(transition),
             is_script_text=is_script_text,
             progress_callback=progress_cb,
-            custom_timeline=custom_tl
+            custom_timeline=custom_tl,
+            effect_strategy=effect_strategy
         )
 
         return result_video, f"✅ Export complete → {result_video}"
@@ -798,6 +799,12 @@ with gr.Blocks(**blocks_kwargs) as demo:
                         minimum=0.0, maximum=1.0, value=0.4, step=0.1,
                         label="Transition (s)"
                     )
+                with gr.Row():
+                    effect_strategy_dropdown = gr.Dropdown(
+                        choices=["Random (No Repeats)", "Cycle All (Ordered)", "Zoom Only", "Pan Only", "Dynamic Diagonals"],
+                        value="Random (No Repeats)",
+                        label="Effect Strategy"
+                    )
 
         # ━━━━ RIGHT MAIN AREA: Timeline + Preview ━━━━
         with gr.Column(scale=7, min_width=500):
@@ -881,7 +888,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
             script_mode, script_file, script_text, audio_file,
             image_mode, images_folder, uploaded_images,
             res_dropdown, fps_dropdown, transition_slider, mapping_radio,
-            timeline_json_bridge
+            timeline_json_bridge, effect_strategy_dropdown
         ],
         outputs=[output_video, output_status]
     )

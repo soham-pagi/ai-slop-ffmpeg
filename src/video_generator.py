@@ -142,7 +142,8 @@ def generate_video(
     transition_duration: float = 0.4,
     is_script_text: bool = False,
     progress_callback: Optional[Callable] = None,
-    custom_timeline: Optional[List[list]] = None
+    custom_timeline: Optional[List[list]] = None,
+    effect_strategy: str = "Random (No Repeats)"
 ):
     """
     Orchestrates parsing, image mapping, Ken Burns animation, audio syncing, and video export.
@@ -194,15 +195,43 @@ def generate_video(
         mapped_clips = map_images_to_timestamps(images_source, timestamps=None, mode=mapping_mode, audio_duration=audio_duration)
         print(f"      -> Generated {len(mapped_clips)} clip assignments.")
 
-    print(f"[3/5] Creating dynamic Ken Burns video clips (Resolution: {resolution[0]}x{resolution[1]} @ {fps}fps)...")
-    effect_types = ["zoom_in", "zoom_out", "pan_right_zoom_in", "pan_left_zoom_in"]
+    print(f"[3/5] Creating dynamic Ken Burns video clips (Resolution: {resolution[0]}x{resolution[1]} @ {fps}fps, Strategy: {effect_strategy})...")
+    all_effects = [
+        "zoom_in", "zoom_out", 
+        "pan_right_zoom_in", "pan_left_zoom_in",
+        "pan_up_zoom_in", "pan_down_zoom_in",
+        "pan_right_zoom_out", "pan_left_zoom_out",
+        "pan_up_right_zoom_in", "pan_down_left_zoom_in",
+        "zoom_in_fast_slow", "zoom_out_slow_fast"
+    ]
+    
+    if effect_strategy == "Zoom Only":
+        pool = ["zoom_in", "zoom_out", "zoom_in_fast_slow", "zoom_out_slow_fast"]
+    elif effect_strategy == "Pan Only":
+        pool = ["pan_right_zoom_in", "pan_left_zoom_in", "pan_up_zoom_in", "pan_down_zoom_in", "pan_right_zoom_out", "pan_left_zoom_out"]
+    elif effect_strategy == "Dynamic Diagonals":
+        pool = ["pan_up_right_zoom_in", "pan_down_left_zoom_in", "pan_right_zoom_in", "pan_left_zoom_in", "zoom_in_fast_slow"]
+    elif effect_strategy == "Cycle All (Ordered)":
+        pool = all_effects
+    else:  # "Random (No Repeats)" or default
+        pool = all_effects
+
     video_clips = []
+    last_effect = None
+    import random
 
     for i, mc in enumerate(mapped_clips):
         if progress_callback:
             progress_callback(0.2 + 0.5 * (i / len(mapped_clips)), f"Creating animation clip {i+1}/{len(mapped_clips)}...")
             
-        effect = effect_types[i % len(effect_types)]
+        if effect_strategy == "Cycle All (Ordered)":
+            effect = pool[i % len(pool)]
+        else:
+            # Smart random: never pick the exact same effect twice in a row
+            available = [e for e in pool if e != last_effect] if len(pool) > 1 else pool
+            effect = random.choice(available)
+            last_effect = effect
+
         print(f"      - Clip {i+1:02d}/{len(mapped_clips):02d}: {os.path.basename(mc.image_path)} "
               f"({mc.duration:.2f}s, Segment #{mc.segment_index}) -> Effect: {effect}")
         
