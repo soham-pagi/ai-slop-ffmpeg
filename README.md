@@ -22,13 +22,23 @@ Kaggle provides powerful hardware and fast video encoding. This repository is st
 
 ### 1. In a Kaggle Notebook Cell (Gradio Web UI)
 
-Open a new notebook cell in Kaggle, clone or upload this repository, install requirements, and launch the Gradio UI with `--share`:
+Open a new notebook cell in Kaggle and use the following **idempotent snippet** (safe to re-run without creating nested folders):
 
-```bash
-# Install dependencies
+```python
+# 0. Always start from Kaggle root working directory to prevent nested cloning!
+%cd /kaggle/working
+
+# 1. Clone repository (ignores error if already cloned)
+!git clone https://github.com/soham-pagi/ai-slop-ffmpeg.git 2>/dev/null || true
+%cd ai-slop-ffmpeg
+
+# 2. Pull latest updates from git
+!git pull
+
+# 3. Install required dependencies
 !pip install -r requirements.txt
 
-# Launch Gradio with public shareable link
+# 4. Launch Gradio with public shareable link
 !python app.py --share
 ```
 *Click the `https://xxxx.gradio.live` link generated in your output to open the full UI, paste your script, upload images/audio, and generate videos directly in your browser!*
