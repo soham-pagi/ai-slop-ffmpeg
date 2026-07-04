@@ -57,18 +57,7 @@ def create_ken_burns_clip(
         w_base = W0
         h_base = W0 / r_target
 
-    use_gpu = False
-    if TORCH_AVAILABLE:
-        try:
-            if torch.cuda.is_available():
-                # Load image onto GPU VRAM! Uses GPU and System RAM!
-                img_np = np.array(img).copy()
-                img_gpu = torch.from_numpy(img_np).permute(2, 0, 1).unsqueeze(0).float().cuda() / 255.0
-                use_gpu = True
-        except Exception:
-            use_gpu = False
-            
-    if not use_gpu and CV2_AVAILABLE:
+    if CV2_AVAILABLE:
         try:
             img_np = np.array(img).copy()
         except Exception:
@@ -109,39 +98,35 @@ def create_ken_burns_clip(
 
         left = xc - w_crop / 2.0
         top = yc - h_crop / 2.0
-        right = xc + w_crop / 2.0
-        bottom = yc + h_crop / 2.0
+        
+        # Sub-pixel affine scale ratio from output frame pixel to input image pixel
+        k = w_crop / target_w
 
-        if use_gpu:
-            try:
-                l_idx = int(max(0, left))
-                t_idx = int(max(0, top))
-                r_idx = int(min(W0, right))
-                b_idx = int(min(H0, bottom))
-                if r_idx <= l_idx or b_idx <= t_idx:
-                    l_idx, t_idx, r_idx, b_idx = 0, 0, W0, H0
-                crop_gpu = img_gpu[:, :, t_idx:b_idx, l_idx:r_idx]
-                res_gpu = F.interpolate(crop_gpu, size=(target_h, target_w), mode='bilinear', align_corners=False)
-                res_clamped = torch.clamp(res_gpu.squeeze(0).permute(1, 2, 0) * 255.0, 0, 255).to(torch.uint8)
-                return res_clamped.cpu().numpy()
-            except Exception:
-                pass
-                
         if CV2_AVAILABLE:
             try:
-                l_idx = int(max(0, left))
-                t_idx = int(max(0, top))
-                r_idx = int(min(W0, right))
-                b_idx = int(min(H0, bottom))
-                if r_idx <= l_idx or b_idx <= t_idx:
-                    l_idx, t_idx, r_idx, b_idx = 0, 0, W0, H0
-                cropped = img_np[t_idx:b_idx, l_idx:r_idx]
-                return cv2.resize(cropped, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+                # 2x3 floating-point Affine matrix for sub-pixel inverse mapping
+                M = np.array([
+                    [k, 0.0, left],
+                    [0.0, k, top]
+                ], dtype=np.float32)
+                return cv2.warpAffine(
+                    img_np,
+                    M,
+                    (target_w, target_h),
+                    flags=cv2.INTER_CUBIC | cv2.WARP_INVERSE_MAP,
+                    borderMode=cv2.BORDER_REFLECT_101
+                )
             except Exception:
                 pass
 
-        cropped = img.crop((left, top, right, bottom))
-        resized = cropped.resize(target_size, Image.Resampling.BICUBIC)
+        # Sub-pixel affine transformation fallback using PIL
+        matrix = (k, 0.0, left, 0.0, k, top)
+        resized = img.transform(
+            target_size,
+            Image.Transform.AFFINE,
+            data=matrix,
+            resample=Image.Resampling.BICUBIC
+        )
         return np.array(resized)
 
     clip = VideoClip(make_frame, duration=duration)
