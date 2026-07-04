@@ -1,6 +1,19 @@
 import numpy as np
 from PIL import Image
 try:
+    import torch
+    import torch.nn.functional as F
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+
+try:
     from moviepy import VideoClip
     import moviepy.video.fx as vfx
     MOVIEPY_V2 = True
@@ -20,17 +33,7 @@ def create_ken_burns_clip(
 ) -> VideoClip:
     """
     Creates a video clip from an image with Ken Burns zoom/pan animation and fade transitions.
-    
-    Args:
-        image_path: Absolute path to the image file.
-        duration: Exact duration of the clip in seconds.
-        effect_type: 'zoom_in', 'zoom_out', 'pan_right_zoom_in', 'pan_left_zoom_in'.
-        target_size: Tuple (width, height) for output resolution.
-        fps: Frames per second.
-        transition_duration: Duration of fade in/out transitions in seconds.
-        
-    Returns:
-        VideoClip: The animated video clip ready for concatenation.
+    Uses PyTorch GPU acceleration when available (Kaggle T4 / RTX 3050), or OpenCV/PIL fallback.
     """
     # Load image once into memory
     img = Image.open(image_path).convert('RGB')
@@ -53,6 +56,18 @@ def create_ken_burns_clip(
     else:
         w_base = W0
         h_base = W0 / r_target
+
+    use_gpu = TORCH_AVAILABLE and torch.cuda.is_available()
+    if use_gpu:
+        try:
+            # Load image onto GPU VRAM! Uses GPU and System RAM!
+            img_np = np.array(img)
+            img_gpu = torch.from_numpy(img_np).permute(2, 0, 1).unsqueeze(0).float().cuda() / 255.0
+        except Exception:
+            use_gpu = False
+            
+    if not use_gpu and CV2_AVAILABLE:
+        img_np = np.array(img)
 
     def make_frame(t):
         p = min(1.0, max(0.0, t / duration)) if duration > 0 else 0.0
@@ -92,9 +107,29 @@ def create_ken_burns_clip(
         right = xc + w_crop / 2.0
         bottom = yc + h_crop / 2.0
 
-        cropped = img.crop((left, top, right, bottom))
-        resized = cropped.resize(target_size, Image.Resampling.BICUBIC)
-        return np.array(resized)
+        if use_gpu:
+            l_idx = int(max(0, left))
+            t_idx = int(max(0, top))
+            r_idx = int(min(W0, right))
+            b_idx = int(min(H0, bottom))
+            if r_idx <= l_idx or b_idx <= t_idx:
+                l_idx, t_idx, r_idx, b_idx = 0, 0, W0, H0
+            crop_gpu = img_gpu[:, :, t_idx:b_idx, l_idx:r_idx]
+            res_gpu = F.interpolate(crop_gpu, size=(target_h, target_w), mode='bilinear', align_corners=False)
+            return (res_gpu.squeeze(0).permute(1, 2, 0) * 255.0).byte().cpu().numpy()
+        elif CV2_AVAILABLE:
+            l_idx = int(max(0, left))
+            t_idx = int(max(0, top))
+            r_idx = int(min(W0, right))
+            b_idx = int(min(H0, bottom))
+            if r_idx <= l_idx or b_idx <= t_idx:
+                l_idx, t_idx, r_idx, b_idx = 0, 0, W0, H0
+            cropped = img_np[t_idx:b_idx, l_idx:r_idx]
+            return cv2.resize(cropped, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+        else:
+            cropped = img.crop((left, top, right, bottom))
+            resized = cropped.resize(target_size, Image.Resampling.BICUBIC)
+            return np.array(resized)
 
     clip = VideoClip(make_frame, duration=duration)
     
