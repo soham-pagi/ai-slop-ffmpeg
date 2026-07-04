@@ -174,7 +174,7 @@ except Exception:
 
 blocks_kwargs: dict[str, Any] = {"title": "Salt-2-Artstyle Video Generator"}
 if not GRADIO_V6:
-    blocks_kwargs["theme"] = gr.themes.Soft() # type: ignore
+    blocks_kwargs["theme"] = gr.themes.Default() # type: ignore
 
 # Build Gradio Interface
 with gr.Blocks(**blocks_kwargs) as demo:
@@ -324,6 +324,6 @@ if __name__ == "__main__":
     print(f"\nLaunching Gradio Interface (Share={args.share}, Port={args.port}, Gradio v{gr.__version__})...")
     launch_kwargs: dict[str, Any] = {"share": args.share, "server_port": args.port}
     if GRADIO_V6:
-        launch_kwargs["theme"] = gr.themes.Soft() # type: ignore
+        launch_kwargs["theme"] = gr.themes.Default() # type: ignore
         
     demo.launch(**launch_kwargs)
