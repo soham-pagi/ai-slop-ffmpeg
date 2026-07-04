@@ -438,6 +438,34 @@ async () => {
 """
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  JS that reads current DOM timeline state at button-click time.
+#  Injected via js= parameter on .click() to guarantee fresh data
+#  regardless of Gradio's internal Svelte/React state management.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+READ_TIMELINE_JS = """
+(...args) => {
+    const tbody = document.getElementById('timeline-tbody');
+    if (tbody) {
+        const rows = tbody.querySelectorAll('tr');
+        const data = [];
+        rows.forEach((tr) => {
+            const s = tr.querySelector('input[data-field="start"]');
+            const d = tr.querySelector('input[data-field="duration"]');
+            data.push({
+                path: tr.getAttribute('data-path') || '',
+                filename: tr.getAttribute('data-filename') || '',
+                start: s ? s.value : '0.0',
+                duration: d ? d.value : '5.0'
+            });
+        });
+        // Replace the last argument (timeline_json_bridge) with fresh DOM data
+        args[args.length - 1] = JSON.stringify(data);
+    }
+    return args;
+}
+"""
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  Backend Functions
@@ -606,23 +634,31 @@ def run_gradio_generation(
         output_path = os.path.join(BASE_DIR, "output_video", "gradio_generated.mp4")
 
         # 6. Check Custom Timeline from JSON bridge
+        #    The JS preprocessor (READ_TIMELINE_JS) injects fresh DOM data
+        #    into timeline_json_str at click time, so this is always up-to-date.
         custom_tl = None
         if timeline_json_str:
             try:
                 tl_rows = json.loads(timeline_json_str)
                 if isinstance(tl_rows, list) and len(tl_rows) > 0:
                     valid_rows = []
-                    for r in tl_rows:
+                    for i, r in enumerate(tl_rows):
                         fname = r.get("filename", "").strip()
-                        # Use full path if available (preserves drag-reorder order exactly)
                         fpath = r.get("path", "").strip()
+                        # Prefer full path (exact), fall back to filename for matching
                         identifier = fpath if (fpath and os.path.exists(fpath)) else fname
-                        if identifier and "Please select" not in identifier and "Error:" not in identifier:
-                            valid_rows.append(["", identifier, r.get("start", "0.0"), r.get("duration", "5.0")])
+                        if not identifier or "Please select" in identifier or "Error:" in identifier:
+                            continue
+                        start_str = r.get("start", "0.0")
+                        dur_str = r.get("duration", "5.0")
+                        valid_rows.append(["", identifier, start_str, dur_str])
                     if valid_rows:
                         custom_tl = valid_rows
-            except Exception:
-                pass
+                        print(f"\n[Timeline Bridge] Received {len(valid_rows)} clips from UI:")
+                        for i, row in enumerate(valid_rows):
+                            print(f"  Clip {i+1}: {os.path.basename(row[1])}  start={row[2]}s  dur={row[3]}s")
+            except Exception as e:
+                print(f"[Timeline Bridge] JSON parse error: {e}")
 
         # 7. Progress Callback
         def progress_cb(pct, msg):
@@ -858,7 +894,8 @@ with gr.Blocks(**blocks_kwargs) as demo:
             res_dropdown, fps_dropdown, transition_slider, mapping_radio,
             timeline_json_bridge
         ],
-        outputs=[output_video, output_status]
+        outputs=[output_video, output_status],
+        js=READ_TIMELINE_JS
     )
 
     # Initialize SortableJS on page load

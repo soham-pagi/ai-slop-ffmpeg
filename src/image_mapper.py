@@ -272,35 +272,57 @@ def create_custom_timeline(
     if not parsed_items:
         raise ValueError("Custom timeline resulted in 0 valid rows. Please check table data.")
 
-    # 2. Build MappedClips with sequential start times (start = cumulative sum of durations)
+    # 2. Build MappedClips respecting user-set start times and durations.
+    #    The ORDER of parsed_items is the exact order from the UI table (after any drag-reorder).
+    #    Clips will be concatenated in this order in the final video.
     mapped_clips = []
-    curr_t = 0.0
     num_items = len(parsed_items)
+
+    print(f"\n[CustomTimeline] Processing {num_items} clips (audio_duration={audio_duration:.2f}s):")
+
     for i, (fname, s_val, d_val) in enumerate(parsed_items):
-        # Use explicit duration if provided, otherwise default to 5.0s
+        # Determine duration
         if d_val is not None and d_val > 0:
             dur = d_val
-        elif i == num_items - 1 and audio_duration > curr_t:
+        elif i == num_items - 1 and audio_duration > 0:
             # Last clip: extend to fill remaining audio
-            dur = audio_duration - curr_t
+            preceding_dur = sum(mc.duration for mc in mapped_clips)
+            remaining = audio_duration - preceding_dur
+            dur = max(remaining, 1.0)
         else:
             dur = 5.0
 
         if dur <= 0:
             dur = 5.0
 
+        # Determine start time (informational for display; video concatenates in order)
+        if s_val is not None and s_val >= 0:
+            start_t = s_val
+        elif mapped_clips:
+            start_t = mapped_clips[-1].end_time
+        else:
+            start_t = 0.0
+
         img_path = find_matching_image(fname, image_paths, path_map)
+
+        print(f"  [{i+1}/{num_items}] {os.path.basename(img_path)}  "
+              f"start={start_t:.2f}s  dur={dur:.2f}s  "
+              f"(src: {'path' if os.path.isabs(fname) else 'name'})")
+
         mapped_clips.append(
             MappedClip(
                 image_path=img_path,
                 duration=dur,
                 segment_index=i + 1,
                 text=f"Manual Segment {i+1}",
-                start_time=curr_t,
-                end_time=curr_t + dur
+                start_time=start_t,
+                end_time=start_t + dur
             )
         )
-        curr_t += dur
+
+    total = sum(mc.duration for mc in mapped_clips)
+    print(f"[CustomTimeline] Total timeline: {total:.2f}s across {len(mapped_clips)} clips\n")
 
     return mapped_clips
+
 
