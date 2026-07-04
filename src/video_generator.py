@@ -1,9 +1,40 @@
 import os
+import subprocess
 from typing import Union, List, Optional, Callable
 from moviepy import concatenate_videoclips, AudioFileClip
 from .timestamp_parser import parse_script, parse_script_text
 from .image_mapper import map_images_to_timestamps
 from .effects import create_ken_burns_clip
+
+
+def get_optimal_video_settings() -> tuple:
+    """
+    Automatically detects if NVIDIA GPU hardware encoding (h264_nvenc) is available.
+    Returns (codec, preset, threads).
+    """
+    threads = os.cpu_count() or 4
+    try:
+        res = subprocess.run(["nvidia-smi"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if res.returncode == 0:
+            ffmpeg_res = subprocess.run(["ffmpeg", "-encoders"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if "h264_nvenc" in ffmpeg_res.stdout:
+                print("\n" + "="*60)
+                print(" 🚀 [GPU Acceleration Active] NVIDIA GPU Detected (RTX / T4)")
+                print("    -> Hardware Encoder: h264_nvenc")
+                print("    -> Encoding Preset:  fast")
+                print(f"    -> CPU Threads:      {threads}")
+                print("="*60 + "\n")
+                return "h264_nvenc", "fast", threads
+    except Exception:
+        pass
+    
+    print("\n" + "="*60)
+    print(" 💻 [CPU Multi-Threading Active] No NVIDIA GPU detected or NVENC unavailable")
+    print("    -> Software Encoder: libx264")
+    print("    -> Encoding Preset:  superfast (High Speed CPU)")
+    print(f"    -> CPU Threads:      {threads}")
+    print("="*60 + "\n")
+    return "libx264", "superfast", threads
 
 
 def generate_video(
@@ -97,14 +128,14 @@ def generate_video(
     print(f"[5/5] Exporting final video to: {output_path}")
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
-    threads = os.cpu_count() or 4
+    codec, preset, threads = get_optimal_video_settings()
     final_video.write_videofile(
         output_path,
         fps=fps,
-        codec="libx264",
+        codec=codec,
         audio_codec="aac",
         threads=threads,
-        preset="medium"
+        preset=preset
     )
 
     if progress_callback:
