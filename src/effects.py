@@ -30,7 +30,10 @@ def create_ken_burns_clip(
     target_size: tuple = (1920, 1080),
     fps: int = 60,
     transition_duration: float = 0.4,
-    transition_style: str = "Cross-Dissolve (Hollywood Blend)"
+    start_transition: str = "Cross-Dissolve (Hollywood Blend)",
+    end_transition: str = "Cross-Dissolve (Hollywood Blend)",
+    prev_image_path: Optional[str] = None,
+    next_image_path: Optional[str] = None
 ) -> VideoClip:
     """
     Creates a video clip from an image with Ken Burns zoom/pan animation and fade transitions.
@@ -46,6 +49,22 @@ def create_ken_burns_clip(
         scale_factor = max((target_w * max_scale) / img.width, (target_h * max_scale) / img.height)
         new_w, new_h = int(img.width * scale_factor), int(img.height * scale_factor)
         img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+    # Preload adjacent frames for Hollywood Cross-Dissolve without MoviePy composition
+    prev_frame = None
+    next_frame = None
+    if prev_image_path and os.path.exists(prev_image_path) and start_transition == "Cross-Dissolve (Hollywood Blend)":
+        try:
+            p_img = Image.open(prev_image_path).convert('RGB').resize((target_w, target_h), Image.Resampling.BILINEAR)
+            prev_frame = np.array(p_img, dtype=np.float32)
+        except Exception:
+            pass
+    if next_image_path and os.path.exists(next_image_path) and end_transition == "Cross-Dissolve (Hollywood Blend)":
+        try:
+            n_img = Image.open(next_image_path).convert('RGB').resize((target_w, target_h), Image.Resampling.BILINEAR)
+            next_frame = np.array(n_img, dtype=np.float32)
+        except Exception:
+            pass
 
     W0, H0 = img.width, img.height
     r_target = target_w / target_h
@@ -77,54 +96,59 @@ def create_ken_burns_clip(
     def make_frame(t):
         p = min(1.0, max(0.0, t / duration)) if duration > 0 else 0.0
 
+        # Consistent aesthetic rate: constant speed per second regardless of clip duration!
+        # This ensures a 2-second clip and a 10-second clip move at the exact same gentle, cinematic pace.
+        z_rate = min(0.35, 0.035 * duration) # 3.5% zoom per second
+        p_rate = min(0.80, 0.16 * duration)  # 16% pan per second
+
         if effect_type == "zoom_in":
-            scale = 1.0 + 0.20 * p
+            scale = 1.0 + z_rate * p
             pan_x = 0.0
             pan_y = 0.0
         elif effect_type == "zoom_out":
-            scale = 1.20 - 0.20 * p
+            scale = (1.0 + z_rate) - z_rate * p
             pan_x = 0.0
             pan_y = 0.0
         elif effect_type == "pan_right_zoom_in":
-            scale = 1.10 + 0.15 * p  # Zoom in 15% to create generous margin for smooth panning
-            pan_x = -0.85 + 1.70 * p # Pan smoothly across 85% of available width from left to right
+            scale = 1.05 + z_rate * p
+            pan_x = -0.5 * p_rate + p_rate * p
             pan_y = 0.0
         elif effect_type == "pan_left_zoom_in":
-            scale = 1.10 + 0.15 * p  # Zoom in 15%
-            pan_x = 0.85 - 1.70 * p  # Pan smoothly across 85% of available width from right to left
+            scale = 1.05 + z_rate * p
+            pan_x = 0.5 * p_rate - p_rate * p
             pan_y = 0.0
         elif effect_type == "pan_up_zoom_in":
-            scale = 1.10 + 0.15 * p
+            scale = 1.05 + z_rate * p
             pan_x = 0.0
-            pan_y = 0.85 - 1.70 * p  # Pan smoothly from bottom to top
+            pan_y = 0.5 * p_rate - p_rate * p
         elif effect_type == "pan_down_zoom_in":
-            scale = 1.10 + 0.15 * p
+            scale = 1.05 + z_rate * p
             pan_x = 0.0
-            pan_y = -0.85 + 1.70 * p # Pan smoothly from top to bottom
+            pan_y = -0.5 * p_rate + p_rate * p
         elif effect_type == "pan_right_zoom_out":
-            scale = 1.25 - 0.15 * p  # Start zoomed in, zoom out smoothly
-            pan_x = -0.85 + 1.70 * p
+            scale = (1.05 + z_rate) - z_rate * p
+            pan_x = -0.5 * p_rate + p_rate * p
             pan_y = 0.0
         elif effect_type == "pan_left_zoom_out":
-            scale = 1.25 - 0.15 * p
-            pan_x = 0.85 - 1.70 * p
+            scale = (1.05 + z_rate) - z_rate * p
+            pan_x = 0.5 * p_rate - p_rate * p
             pan_y = 0.0
         elif effect_type == "pan_up_right_zoom_in":
-            scale = 1.15 + 0.15 * p
-            pan_x = -0.70 + 1.40 * p # Diagonal pan left-to-right
-            pan_y = 0.70 - 1.40 * p  # Diagonal pan bottom-to-top
+            scale = 1.08 + z_rate * p
+            pan_x = -0.4 * p_rate + 0.8 * p_rate * p
+            pan_y = 0.4 * p_rate - 0.8 * p_rate * p
         elif effect_type == "pan_down_left_zoom_in":
-            scale = 1.15 + 0.15 * p
-            pan_x = 0.70 - 1.40 * p  # Diagonal pan right-to-left
-            pan_y = -0.70 + 1.40 * p # Diagonal pan top-to-bottom
+            scale = 1.08 + z_rate * p
+            pan_x = 0.4 * p_rate - 0.8 * p_rate * p
+            pan_y = -0.4 * p_rate + 0.8 * p_rate * p
         elif effect_type == "zoom_in_fast_slow":
             p_ease = 1.0 - (1.0 - p) ** 2  # Decelerating cinematic ease-out
-            scale = 1.0 + 0.22 * p_ease
+            scale = 1.0 + z_rate * p_ease
             pan_x = 0.0
             pan_y = 0.0
         elif effect_type == "zoom_out_slow_fast":
             p_ease = p ** 2  # Accelerating cinematic ease-in
-            scale = 1.22 - 0.22 * p_ease
+            scale = (1.0 + z_rate) - z_rate * p_ease
             pan_x = 0.0
             pan_y = 0.0
         else:
@@ -147,9 +171,9 @@ def create_ken_burns_clip(
         # Sub-pixel affine scale ratio from output frame pixel to input image pixel
         k = w_crop / target_w
 
+        # Apply sub-pixel affine transformation
         if use_gpu:
             try:
-                # Sub-pixel bilinear grid sampling on NVIDIA GPU VRAM (eliminates texture vibration)
                 tx = (2.0 * pan_x * max_shift_x) / W0
                 ty = (2.0 * pan_y * max_shift_y) / H0
                 theta = torch.tensor([[
@@ -159,18 +183,19 @@ def create_ken_burns_clip(
                 grid = F.affine_grid(theta, size=(1, 3, target_h, target_w), align_corners=False)
                 res_gpu = F.grid_sample(img_gpu, grid, mode='bilinear', padding_mode='reflection', align_corners=False)
                 res_clamped = torch.clamp(res_gpu.squeeze(0).permute(1, 2, 0) * 255.0, 0, 255).to(torch.uint8)
-                return res_clamped.cpu().numpy()
+                res = res_clamped.cpu().numpy()
             except Exception:
-                pass
+                res = None
+        else:
+            res = None
 
-        if CV2_AVAILABLE:
+        if res is None and CV2_AVAILABLE:
             try:
-                # 2x3 floating-point Affine matrix for sub-pixel inverse mapping
                 M = np.array([
                     [k, 0.0, left],
                     [0.0, k, top]
                 ], dtype=np.float32)
-                return cv2.warpAffine(
+                res = cv2.warpAffine(
                     img_np,
                     M,
                     (target_w, target_h),
@@ -178,82 +203,51 @@ def create_ken_burns_clip(
                     borderMode=cv2.BORDER_REFLECT_101
                 )
             except Exception:
-                pass
+                res = None
 
-        # Sub-pixel affine transformation fallback using PIL
-        matrix = (k, 0.0, left, 0.0, k, top)
-        resized = img.transform(
-            target_size,
-            Image.Transform.AFFINE,
-            data=matrix,
-            resample=Image.Resampling.BILINEAR
-        )
-        return np.array(resized)
+        if res is None:
+            matrix = (k, 0.0, left, 0.0, k, top)
+            resized = img.transform(
+                target_size,
+                Image.Transform.AFFINE,
+                data=matrix,
+                resample=Image.Resampling.BILINEAR
+            )
+            res = np.array(resized)
+
+        # Bake flawless, zero-blackout transitions directly into RGB frame!
+        half_dur = transition_duration / 2.0
+        if half_dur > 0 and duration > half_dur * 2:
+            res_float = res.astype(np.float32)
+            if t < half_dur and start_transition != "Clean Cut (No Fade)":
+                alpha = max(0.0, min(1.0, t / half_dur))
+                if start_transition == "Cross-Dissolve (Hollywood Blend)" and prev_frame is not None:
+                    res_float = res_float * (0.5 + 0.5 * alpha) + prev_frame * (0.5 * (1.0 - alpha))
+                elif start_transition == "Flash / Dip to White":
+                    res_float = res_float * alpha + 255.0 * (1.0 - alpha)
+                elif start_transition == "Dip to Black":
+                    res_float = res_float * alpha
+                res = np.clip(res_float, 0, 255).astype(np.uint8)
+            elif t > duration - half_dur and end_transition != "Clean Cut (No Fade)":
+                alpha = max(0.0, min(1.0, (duration - t) / half_dur))
+                if end_transition == "Cross-Dissolve (Hollywood Blend)" and next_frame is not None:
+                    res_float = res_float * (0.5 + 0.5 * alpha) + next_frame * (0.5 * (1.0 - alpha))
+                elif end_transition == "Flash / Dip to White":
+                    res_float = res_float * alpha + 255.0 * (1.0 - alpha)
+                elif end_transition == "Dip to Black":
+                    res_float = res_float * alpha
+                res = np.clip(res_float, 0, 255).astype(np.uint8)
+
+        return res
 
     clip = VideoClip(make_frame, duration=duration)
     
-    # In MoviePy v1 vs v2, set fps and apply fade effects
+    # In MoviePy v1 vs v2, set fps
     if hasattr(clip, "with_fps"):
         clip = clip.with_fps(fps)
     elif hasattr(clip, "set_fps"):
         clip = clip.set_fps(fps)
     else:
         setattr(clip, "fps", fps)
-
-    # Apply Hollywood-grade transitions (eliminating blackouts)
-    fade_dur = 0.0
-    if transition_duration > 0 and duration > transition_duration * 2:
-        fade_dur = transition_duration
-    elif transition_duration > 0 and duration > transition_duration:
-        fade_dur = duration / 3.0
-
-    if transition_style == "Random Cinematic":
-        import random
-        transition_style = random.choice(["Cross-Dissolve (Hollywood Blend)", "Flash / Dip to White", "Clean Cut (No Fade)"])
-
-    if fade_dur > 0 and transition_style != "Clean Cut (No Fade)":
-        if transition_style == "Dip to Black":
-            # Classic fade out to black and fade in from black
-            if MOVIEPY_V2 and hasattr(vfx, "FadeIn"):
-                effects = [vfx.FadeIn(fade_dur), vfx.FadeOut(fade_dur)]
-                if hasattr(clip, "with_effects"):
-                    clip = clip.with_effects(effects)
-                elif hasattr(clip, "fx"):
-                    for fx_func in effects:
-                        clip = clip.fx(fx_func)
-            else:
-                if hasattr(clip, "fadein"):
-                    clip = clip.fadein(fade_dur)
-                if hasattr(clip, "fadeout"):
-                    clip = clip.fadeout(fade_dur)
-        elif transition_style == "Flash / Dip to White":
-            # Flash to pure white at cuts (high energy trailer style, zero blackout!)
-            def flash_white_filter(get_frame_func, t):
-                frame = get_frame_func(t)
-                frame_float = frame.astype(np.float32)
-                if t < fade_dur:
-                    alpha = t / fade_dur
-                    res = frame_float * alpha + 255.0 * (1.0 - alpha)
-                elif t > duration - fade_dur:
-                    alpha = (duration - t) / fade_dur
-                    res = frame_float * alpha + 255.0 * (1.0 - alpha)
-                else:
-                    return frame
-                return np.clip(res, 0, 255).astype(np.uint8)
-            
-            if hasattr(clip, "fl"):
-                clip = clip.fl(flash_white_filter)
-        else:
-            # "Cross-Dissolve (Hollywood Blend)" or default
-            # Only apply FadeIn (or crossfadein) so the previous clip stays full brightness underneath!
-            # ZERO blackout!
-            if MOVIEPY_V2 and hasattr(vfx, "FadeIn"):
-                if hasattr(clip, "with_effects"):
-                    clip = clip.with_effects([vfx.FadeIn(fade_dur)])
-                elif hasattr(clip, "fx"):
-                    clip = clip.fx(vfx.FadeIn(fade_dur))
-            else:
-                if hasattr(clip, "fadein"):
-                    clip = clip.fadein(fade_dur)
 
     return cast(VideoClip, clip)

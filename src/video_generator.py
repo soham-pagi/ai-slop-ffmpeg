@@ -221,6 +221,15 @@ def generate_video(
     last_effect = None
     import random
 
+    # Pre-generate distinct transition styles for every single cut in the video!
+    cut_transitions = []
+    all_styles = ["Cross-Dissolve (Hollywood Blend)", "Flash / Dip to White", "Clean Cut (No Fade)"]
+    for j in range(max(0, len(mapped_clips) - 1)):
+        if transition_style == "Random Cinematic":
+            cut_transitions.append(random.choice(all_styles))
+        else:
+            cut_transitions.append(transition_style)
+
     for i, mc in enumerate(mapped_clips):
         if progress_callback:
             progress_callback(0.2 + 0.5 * (i / len(mapped_clips)), f"Creating animation clip {i+1}/{len(mapped_clips)}...")
@@ -233,22 +242,25 @@ def generate_video(
             effect = random.choice(available)
             last_effect = effect
 
-        print(f"      - Clip {i+1:02d}/{len(mapped_clips):02d}: {os.path.basename(mc.image_path)} "
-              f"({mc.duration:.2f}s, Segment #{mc.segment_index}) -> Effect: {effect} | Transition: {transition_style}")
-        
-        # For Hollywood Cross-Dissolve, extend clip duration by transition_duration so negative padding overlap preserves exact timestamps!
-        clip_dur = mc.duration
-        if transition_style in ["Cross-Dissolve (Hollywood Blend)", "Random Cinematic"] and i > 0 and transition_duration > 0:
-            clip_dur += transition_duration
+        start_trans = "Clean Cut (No Fade)" if i == 0 else cut_transitions[i - 1]
+        end_trans = "Clean Cut (No Fade)" if i == len(mapped_clips) - 1 else cut_transitions[i]
+        prev_path = mapped_clips[i - 1].image_path if i > 0 else None
+        next_path = mapped_clips[i + 1].image_path if i < len(mapped_clips) - 1 else None
 
+        print(f"      - Clip {i+1:02d}/{len(mapped_clips):02d}: {os.path.basename(mc.image_path)} "
+              f"({mc.duration:.2f}s, Segment #{mc.segment_index}) -> Effect: {effect} | In: {start_trans} | Out: {end_trans}")
+        
         clip = create_ken_burns_clip(
             image_path=mc.image_path,
-            duration=clip_dur,
+            duration=mc.duration,
             effect_type=effect,
             target_size=resolution,
             fps=fps,
             transition_duration=transition_duration,
-            transition_style=transition_style
+            start_transition=start_trans,
+            end_transition=end_trans,
+            prev_image_path=prev_path,
+            next_image_path=next_path
         )
         video_clips.append(clip)
 
@@ -256,12 +268,7 @@ def generate_video(
         progress_callback(0.75, "Concatenating video clips and syncing audio...")
 
     print(f"[4/5] Concatenating clips and synchronizing audio (Style: {transition_style})...")
-    pad = -transition_duration if transition_style in ["Cross-Dissolve (Hollywood Blend)", "Random Cinematic"] and transition_duration > 0 else 0
-    try:
-        final_video = concatenate_videoclips(video_clips, method="compose", padding=pad)
-    except TypeError:
-        # Fallback if moviepy version doesn't accept padding in compose
-        final_video = concatenate_videoclips(video_clips, method="compose")
+    final_video = concatenate_videoclips(video_clips)
 
     if not audio_clip and audio_path and os.path.exists(audio_path):
         try:
