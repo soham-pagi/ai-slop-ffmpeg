@@ -28,18 +28,16 @@ def run_gradio_generation(
     fps,
     transition,
     mapping_mode,
+    timeline_table,
     progress=gr.Progress()
 ):
     try:
-        # 1. Resolve Script Source
-        if script_mode == "Upload File":
-            if not script_file:
-                raise ValueError("Please upload a script file!")
+        # 1. Resolve Script Source (Optional)
+        script_source = None
+        is_script_text = False
+        if script_mode == "Upload File" and script_file:
             script_source = script_file.name if hasattr(script_file, "name") else script_file
-            is_script_text = False
-        else:
-            if not script_text or not script_text.strip():
-                raise ValueError("Please paste script text!")
+        elif script_mode == "Paste Text" and script_text and script_text.strip():
             script_source = script_text
             is_script_text = True
 
@@ -66,11 +64,18 @@ def run_gradio_generation(
         # 5. Define Output Path
         output_path = os.path.join(BASE_DIR, "output_video", "gradio_generated.mp4")
 
-        # 6. Progress Callback
+        # 6. Check Custom Timeline Table
+        custom_tl = None
+        if timeline_table is not None and hasattr(timeline_table, "__len__") and len(timeline_table) > 0:
+            valid_rows = [row for row in timeline_table if row and len(row) >= 3 and str(row[1]).strip() != "" and "Please select" not in str(row[1]) and "Error:" not in str(row[1])]
+            if len(valid_rows) > 0:
+                custom_tl = valid_rows
+
+        # 7. Progress Callback
         def progress_cb(pct, msg):
             progress(pct, desc=msg)
 
-        # 7. Generate Video
+        # 8. Generate Video
         result_video = generate_video(
             script_source=script_source,
             audio_path=audio_path,
@@ -81,7 +86,8 @@ def run_gradio_generation(
             fps=int(fps),
             transition_duration=float(transition),
             is_script_text=is_script_text,
-            progress_callback=progress_cb
+            progress_callback=progress_cb,
+            custom_timeline=custom_tl
         )
         
         return result_video, f"✅ Video successfully generated and saved to: {result_video}"
@@ -90,6 +96,73 @@ def run_gradio_generation(
         import traceback
         traceback.print_exc()
         return None, f"❌ Error: {str(e)}"
+
+
+def populate_timeline_table(script_mode, script_file, script_text, audio_file, image_mode, images_folder, uploaded_images, mapping_mode):
+    try:
+        from src.image_mapper import get_image_files, map_images_to_timestamps
+        from src.timestamp_parser import parse_script, parse_script_text
+        try:
+            from moviepy import AudioFileClip
+        except ImportError:
+            from moviepy.editor import AudioFileClip
+        
+        images_source = ""
+        if image_mode == "Select Local Folder" and images_folder and os.path.exists(images_folder):
+            images_source = images_folder
+        elif image_mode == "Upload Image Files" and uploaded_images:
+            images_source = [f.name if hasattr(f, "name") else f for f in uploaded_images]
+        else:
+            return [[1, "Please select/upload images first", 5.0]]
+            
+        audio_dur = 0.0
+        if audio_file and os.path.exists(audio_file):
+            try:
+                clip = AudioFileClip(audio_file)
+                audio_dur = clip.duration or 0.0
+            except Exception:
+                pass
+                
+        timestamps = None
+        if script_mode == "Upload File" and script_file:
+            path = script_file.name if hasattr(script_file, "name") else script_file
+            _, timestamps = parse_script(path)
+        elif script_mode == "Paste Text" and script_text and script_text.strip():
+            _, timestamps = parse_script_text(script_text)
+            
+        mapped = map_images_to_timestamps(images_source, timestamps=timestamps, mode=mapping_mode, audio_duration=audio_dur)
+        
+        rows = []
+        for i, mc in enumerate(mapped):
+            rows.append([i + 1, os.path.basename(mc.image_path), round(mc.duration, 2)])
+        return rows
+    except Exception as e:
+        return [[1, f"Error: {str(e)}", 5.0]]
+
+
+def equalize_table_durations(audio_file, table_data):
+    try:
+        if not table_data or len(table_data) == 0:
+            return table_data
+        try:
+            from moviepy import AudioFileClip
+        except ImportError:
+            from moviepy.editor import AudioFileClip
+            
+        if not audio_file or not os.path.exists(audio_file):
+            dur = 5.0
+        else:
+            clip = AudioFileClip(audio_file)
+            audio_dur = clip.duration or 0.0
+            dur = round(audio_dur / len(table_data), 2) if len(table_data) > 0 else 5.0
+            
+        new_rows = []
+        for i, row in enumerate(table_data):
+            if len(row) >= 2:
+                new_rows.append([i + 1, row[1], dur])
+        return new_rows
+    except Exception:
+        return table_data
 
 
 # Handle Gradio theme compatibility between v4/v5 (Kaggle) and v6+ (Local)
@@ -114,9 +187,9 @@ with gr.Blocks(**blocks_kwargs) as demo:
     
     with gr.Row():
         with gr.Column(scale=5):
-            gr.Markdown("### 1. Script & Timestamps")
+            gr.Markdown("### 1. Script & Timestamps (Optional)")
             script_mode = gr.Radio(
-                choices=["Paste Text", "Upload File"],
+                choices=["Paste Text", "Upload File", "No Script (Automatic / Manual)"],
                 value="Paste Text",
                 label="Script Input Method"
             )
@@ -196,6 +269,35 @@ with gr.Blocks(**blocks_kwargs) as demo:
                     label="Transition Duration (s)"
                 )
 
+            with gr.Accordion("🕒 Manual Image Alignment & Timeline Table (Optional)", open=False):
+                gr.Markdown(
+                    "Upload or select your images above, then click **'🔄 Populate Table from Images & Script/Audio'** "
+                    "to view and edit exact image ordering and durations! You can manually re-order images or change durations."
+                )
+                with gr.Row():
+                    populate_btn = gr.Button("🔄 Populate Table from Images & Script/Audio", variant="secondary")
+                    equalize_btn = gr.Button("⏱️ Equalize Durations to Audio", variant="secondary")
+                
+                timeline_table = gr.Dataframe(
+                    headers=["Order", "Image Filename", "Duration (s)"],
+                    datatype=["number", "str", "number"],
+                    row_count=(5, "dynamic"),
+                    col_count=(3, "fixed"),
+                    interactive=True,
+                    label="Custom Timeline Table"
+                )
+
+                populate_btn.click(
+                    fn=populate_timeline_table,
+                    inputs=[script_mode, script_file, script_text, audio_file, image_mode, images_folder, uploaded_images, mapping_radio],
+                    outputs=[timeline_table]
+                )
+                equalize_btn.click(
+                    fn=equalize_table_durations,
+                    inputs=[audio_file, timeline_table],
+                    outputs=[timeline_table]
+                )
+
             generate_btn = gr.Button("🎬 Generate Video", variant="primary", size="lg")
 
     with gr.Row():
@@ -208,7 +310,8 @@ with gr.Blocks(**blocks_kwargs) as demo:
         inputs=[
             script_mode, script_file, script_text, audio_file,
             image_mode, images_folder, uploaded_images,
-            res_dropdown, fps_dropdown, transition_slider, mapping_radio
+            res_dropdown, fps_dropdown, transition_slider, mapping_radio,
+            timeline_table
         ],
         outputs=[output_video, output_status]
     )

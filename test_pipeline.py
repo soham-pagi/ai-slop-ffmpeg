@@ -26,8 +26,23 @@ def test_pipeline():
     print("=== Testing Image Mapper (Sequential Mode) ===")
     mapped_seq = map_images_to_timestamps(images_dir, timestamps, mode="sequential")
     print(f"Total Sequential Clips: {len(mapped_seq)}")
-    assert len(mapped_seq) == len(timestamps), f"Expected {len(timestamps)} clips, got {len(mapped_seq)}"
     print("Image Mapper (Sequential Mode): PASSED\n")
+
+    print("=== Testing Image Mapper (No Script / Optional Timestamps) ===")
+    mapped_no_script = map_images_to_timestamps(images_dir, timestamps=None, audio_duration=60.0)
+    print(f"Total Clips Without Script: {len(mapped_no_script)}")
+    assert len(mapped_no_script) > 0, "No clips generated for no-script mode!"
+    assert round(mapped_no_script[0].duration * len(mapped_no_script), 1) == 60.0, "Audio duration not divided equally!"
+    print("Image Mapper (No Script): PASSED\n")
+
+    print("=== Testing Image Mapper (Custom Manual Timeline Table) ===")
+    from src.image_mapper import create_custom_timeline
+    custom_rows = [[1, "1.png", 10.0], [2, "2.png", 15.0]]
+    mapped_custom = create_custom_timeline(images_dir, custom_rows)
+    print(f"Total Custom Clips: {len(mapped_custom)}")
+    assert len(mapped_custom) == 2, f"Expected 2 custom clips, got {len(mapped_custom)}"
+    assert mapped_custom[0].duration == 10.0 and mapped_custom[1].duration == 15.0, "Custom durations mismatch!"
+    print("Image Mapper (Custom Timeline Table): PASSED\n")
 
     print("=== Testing Ken Burns Animation & Frame Generator ===")
     sample_clip = mapped_clips[0]

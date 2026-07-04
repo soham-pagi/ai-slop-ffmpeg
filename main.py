@@ -24,7 +24,7 @@ def main():
     default_output = os.path.join(base_dir, "output_video", "How_Ancient_Humans_Used_Salt.mp4")
 
     parser.add_argument("--script", type=str, default=default_script,
-                        help="Path to script text file with timestamps")
+                        help="Path to script text file with timestamps (optional, pass 'none' to omit)")
     parser.add_argument("--audio", type=str, default=default_audio,
                         help="Path to audio file (.wav, .mp3)")
     parser.add_argument("--images", type=str, default=default_images,
@@ -42,8 +42,10 @@ def main():
 
     args = parser.parse_args()
 
+    script_arg = None if (args.script is None or str(args.script).lower() == "none" or not str(args.script).strip()) else args.script
+
     generate_video(
-        script_source=args.script,
+        script_source=script_arg,
         audio_path=args.audio,
         images_source=args.images,
         output_path=args.output,

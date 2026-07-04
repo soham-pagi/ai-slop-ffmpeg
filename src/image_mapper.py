@@ -1,7 +1,7 @@
 import os
 import re
 from dataclasses import dataclass
-from typing import List, Union
+from typing import List, Union, Optional, Any
 from .timestamp_parser import TimestampSegment
 
 
@@ -50,25 +50,37 @@ def get_image_files(images_source: Union[str, List[str]]) -> List[str]:
 
 def map_images_to_timestamps(
     images_source: Union[str, List[str]],
-    timestamps: List[TimestampSegment],
-    mode: str = "index"
+    timestamps: Optional[List[TimestampSegment]] = None,
+    mode: str = "index",
+    audio_duration: Optional[float] = None
 ) -> List[MappedClip]:
     """
     Maps available images to the provided timestamp segments.
-    
-    Args:
-        images_source: Path to folder containing images OR list of uploaded image file paths.
-        timestamps: List of TimestampSegment objects parsed from script.
-        mode: 'index' (group by filename integer prefix) or 'sequential'.
-        
-    Returns:
-        List[MappedClip]: Ordered sequence of clips to be generated.
+    If timestamps is None or empty, divides audio_duration equally among all images (or defaults to 5.0s per image).
     """
     image_paths = get_image_files(images_source)
     if not image_paths:
         raise ValueError(f"No valid image files found in {images_source}")
 
     mapped_clips = []
+
+    if not timestamps:
+        print(f"[ImageMapper] No script timestamps provided. Creating equal-duration timeline for {len(image_paths)} images...")
+        dur = (audio_duration / len(image_paths)) if (audio_duration and audio_duration > 0) else 5.0
+        curr_time = 0.0
+        for i, path in enumerate(image_paths):
+            mapped_clips.append(
+                MappedClip(
+                    image_path=path,
+                    duration=dur,
+                    segment_index=i + 1,
+                    text=f"Image {i+1}",
+                    start_time=curr_time,
+                    end_time=curr_time + dur
+                )
+            )
+            curr_time += dur
+        return mapped_clips
 
     if mode == "index":
         # Group images by leading integer in filename
@@ -142,4 +154,54 @@ def map_images_to_timestamps(
     else:
         raise ValueError(f"Unknown mapping mode: {mode}")
 
+    return mapped_clips
+
+
+def create_custom_timeline(
+    images_source: Union[str, List[str]],
+    timeline_rows: List[List[Any]]
+) -> List[MappedClip]:
+    """
+    Creates a MappedClip timeline from manual Dataframe rows: [[order, filename, duration], ...].
+    """
+    image_paths = get_image_files(images_source)
+    if not image_paths:
+        raise ValueError(f"No valid image files found in {images_source}")
+        
+    # Build lookup map from filename to full path
+    path_map = {os.path.basename(p): p for p in image_paths}
+    
+    mapped_clips = []
+    curr_time = 0.0
+    
+    for i, row in enumerate(timeline_rows):
+        if not row or len(row) < 3:
+            continue
+        filename = str(row[1]).strip()
+        try:
+            duration = float(row[2])
+        except (ValueError, TypeError):
+            duration = 5.0
+            
+        if duration <= 0:
+            continue
+            
+        # Find matching image path (or fallback to first image if deleted/renamed)
+        img_path = path_map.get(filename, image_paths[0])
+        
+        mapped_clips.append(
+            MappedClip(
+                image_path=img_path,
+                duration=duration,
+                segment_index=i + 1,
+                text=f"Manual Segment {i+1}",
+                start_time=curr_time,
+                end_time=curr_time + duration
+            )
+        )
+        curr_time += duration
+        
+    if not mapped_clips:
+        raise ValueError("Custom timeline resulted in 0 valid clips. Please check table durations.")
+        
     return mapped_clips
