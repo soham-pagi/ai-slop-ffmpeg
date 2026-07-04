@@ -180,6 +180,10 @@ def find_matching_image(filename: str, image_paths: List[str], path_map: dict) -
     if not filename:
         return image_paths[0]
     fname_clean = filename.strip()
+
+    # 0. If it's already a full path that exists, use it directly
+    if os.path.isabs(fname_clean) and os.path.exists(fname_clean):
+        return fname_clean
     
     # 1. Exact match (case-sensitive)
     if fname_clean in path_map:
@@ -268,40 +272,23 @@ def create_custom_timeline(
     if not parsed_items:
         raise ValueError("Custom timeline resulted in 0 valid rows. Please check table data.")
 
-    # 2. Compute start_time for each row
-    start_times = []
-    curr_t = 0.0
-    for i, (fname, s_val, d_val) in enumerate(parsed_items):
-        if s_val is not None and s_val >= 0:
-            start_times.append(s_val)
-            curr_t = s_val
-        else:
-            start_times.append(curr_t)
-            # If dur_val provided, advance curr_t for next fallback
-            if d_val is not None and d_val > 0:
-                curr_t += d_val
-            else:
-                curr_t += 5.0
-
-    # 3. Compute duration for each row and build MappedClips
+    # 2. Build MappedClips with sequential start times (start = cumulative sum of durations)
     mapped_clips = []
+    curr_t = 0.0
     num_items = len(parsed_items)
     for i, (fname, s_val, d_val) in enumerate(parsed_items):
-        st = start_times[i]
-        
-        # Determine duration
+        # Use explicit duration if provided, otherwise default to 5.0s
         if d_val is not None and d_val > 0:
             dur = d_val
-        elif i + 1 < num_items and start_times[i+1] > st:
-            dur = start_times[i+1] - st
-        elif i == num_items - 1 and audio_duration > st:
-            dur = audio_duration - st
+        elif i == num_items - 1 and audio_duration > curr_t:
+            # Last clip: extend to fill remaining audio
+            dur = audio_duration - curr_t
         else:
             dur = 5.0
-            
+
         if dur <= 0:
             dur = 5.0
-            
+
         img_path = find_matching_image(fname, image_paths, path_map)
         mapped_clips.append(
             MappedClip(
@@ -309,9 +296,11 @@ def create_custom_timeline(
                 duration=dur,
                 segment_index=i + 1,
                 text=f"Manual Segment {i+1}",
-                start_time=st,
-                end_time=st + dur
+                start_time=curr_t,
+                end_time=curr_t + dur
             )
         )
-        
+        curr_t += dur
+
     return mapped_clips
+

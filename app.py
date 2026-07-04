@@ -172,7 +172,7 @@ def build_timeline_html(rows):
           <td class="tl-cell tl-filename">{fname}</td>
           <td class="tl-cell" style="text-align:center; width:90px;">
             <input type="text" value="{start}" data-field="start" class="tl-input"
-                   onchange="window.__timelineChanged && window.__timelineChanged()" />
+                   readonly style="opacity:0.6; cursor:default;" title="Auto-calculated from durations" />
           </td>
           <td class="tl-cell" style="text-align:center; width:90px;">
             <input type="text" value="{dur}" data-field="duration" class="tl-input"
@@ -332,31 +332,74 @@ async () => {
             handle: '.tl-handle',
             ghostClass: 'sortable-ghost',
             chosenClass: 'sortable-chosen',
-            onEnd: function() { syncToGradio(); }
+            onEnd: function() { recalcAndSync(); }
         });
     }
 
-    window.__timelineChanged = function() { syncToGradio(); };
+    window.__timelineChanged = function() { recalcAndSync(); };
 
-    function syncToGradio() {
+    function recalcAndSync() {
         const tbody = document.getElementById('timeline-tbody');
         if (!tbody) return;
         const rows = tbody.querySelectorAll('tr');
+        if (rows.length === 0) return;
+
+        // Pass 1: read all durations, and the first row's start
+        let firstStart = 0.0;
+        const firstStartInput = rows[0].querySelector('input[data-field="start"]');
+        if (firstStartInput) {
+            const parsed = parseFloat(firstStartInput.value);
+            if (!isNaN(parsed) && parsed >= 0) firstStart = parsed;
+        }
+
+        let cumulative = firstStart;
         const data = [];
-        rows.forEach((tr) => {
-            const s = tr.querySelector('input[data-field="start"]');
-            const d = tr.querySelector('input[data-field="duration"]');
+        rows.forEach((tr, idx) => {
+            const sInput = tr.querySelector('input[data-field="start"]');
+            const dInput = tr.querySelector('input[data-field="duration"]');
+            let dur = 5.0;
+            if (dInput) {
+                const p = parseFloat(dInput.value);
+                if (!isNaN(p) && p > 0) dur = p;
+            }
+
+            // Set start time = cumulative (auto-calculated)
+            if (sInput) sInput.value = cumulative.toFixed(2);
+
+            // Update the order number in the second cell
+            const cells = tr.querySelectorAll('td');
+            if (cells.length >= 2) {
+                cells[1].textContent = idx + 1;
+            }
+
             data.push({
                 path: tr.getAttribute('data-path') || '',
                 filename: tr.getAttribute('data-filename') || '',
-                start: s ? s.value : '0.0',
-                duration: d ? d.value : '5.0'
+                start: cumulative.toFixed(2),
+                duration: dur.toString()
             });
+
+            cumulative += dur;
         });
+
+        // Update stats bar
+        const statsEl = document.getElementById('tl-stats');
+        if (statsEl) {
+            const totalDur = cumulative - firstStart;
+            statsEl.innerHTML =
+                '<div>CLIPS: <span>' + data.length + '</span></div>' +
+                '<div>TOTAL: <span>' + totalDur.toFixed(1) + 's</span></div>';
+        }
+
+        // Push to Gradio hidden bridge using native setter to bypass Svelte controlled input
         const el = document.querySelector('#timeline-json-bridge textarea');
         if (el) {
-            el.value = JSON.stringify(data);
+            const nativeSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLTextAreaElement.prototype, 'value'
+            ).set;
+            nativeSetter.call(el, JSON.stringify(data));
             el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
         }
     }
 
@@ -367,6 +410,7 @@ async () => {
     initSortable();
 }
 """
+
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -544,8 +588,11 @@ def run_gradio_generation(
                     valid_rows = []
                     for r in tl_rows:
                         fname = r.get("filename", "").strip()
-                        if fname and "Please select" not in fname and "Error:" not in fname:
-                            valid_rows.append(["", fname, r.get("start", "0.0"), r.get("duration", "5.0")])
+                        # Use full path if available (preserves drag-reorder order exactly)
+                        fpath = r.get("path", "").strip()
+                        identifier = fpath if (fpath and os.path.exists(fpath)) else fname
+                        if identifier and "Please select" not in identifier and "Error:" not in identifier:
+                            valid_rows.append(["", identifier, r.get("start", "0.0"), r.get("duration", "5.0")])
                     if valid_rows:
                         custom_tl = valid_rows
             except Exception:
@@ -712,7 +759,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
                     ✂️ Timeline
                 </span>
                 <span style="font-size:11px; color:#4a4a7a; margin-left:auto;">
-                    Drag ⠿ to reorder · Edit start/duration inline
+                    Drag ⠿ to reorder · Edit duration (start auto-calculates)
                 </span>
             </div>
             """)
