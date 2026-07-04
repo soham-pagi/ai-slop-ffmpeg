@@ -92,8 +92,18 @@ def run_gradio_generation(
         return None, f"❌ Error: {str(e)}"
 
 
+# Handle Gradio theme compatibility between v4/v5 (Kaggle) and v6+ (Local)
+try:
+    GRADIO_V6 = int(gr.__version__.split(".")[0]) >= 6
+except Exception:
+    GRADIO_V6 = False
+
+blocks_kwargs = {"title": "Salt-2-Artstyle Video Generator"}
+if not GRADIO_V6:
+    blocks_kwargs["theme"] = gr.themes.Soft()
+
 # Build Gradio Interface
-with gr.Blocks(title="Salt-2-Artstyle Video Generator") as demo:
+with gr.Blocks(**blocks_kwargs) as demo:
     gr.Markdown(
         """
         # 🎬 Automated Video Generator with Ken Burns Effects & Audio Sync
@@ -210,5 +220,9 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=7860, help="Port to run the server on")
     args = parser.parse_args()
 
-    print(f"\nLaunching Gradio Interface (Share={args.share}, Port={args.port})...")
-    demo.launch(share=args.share, server_port=args.port, theme=gr.themes.Soft())
+    print(f"\nLaunching Gradio Interface (Share={args.share}, Port={args.port}, Gradio v{gr.__version__})...")
+    launch_kwargs = {"share": args.share, "server_port": args.port}
+    if GRADIO_V6:
+        launch_kwargs["theme"] = gr.themes.Soft()
+        
+    demo.launch(**launch_kwargs)
