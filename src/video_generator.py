@@ -19,14 +19,14 @@ def get_optimal_video_settings() -> tuple:
     
     # Check PyTorch GPU acceleration for frame rendering
     try:
-        import torch
+        import torch  # type: ignore
         if torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0)
             print("\n" + "="*60)
             print(f" 🚀 [GPU Frame Generation Active] PyTorch CUDA Detected: {gpu_name}")
             print("    -> Ken Burns animation & rendering running at 50x speed on GPU VRAM!")
             print("="*60)
-    except ImportError:
+    except Exception:
         pass
 
     try:

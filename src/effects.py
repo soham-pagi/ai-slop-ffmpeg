@@ -1,16 +1,16 @@
 import numpy as np
 from PIL import Image
 try:
-    import torch
-    import torch.nn.functional as F
+    import torch  # type: ignore
+    import torch.nn.functional as F  # type: ignore
     TORCH_AVAILABLE = True
-except ImportError:
+except Exception:
     TORCH_AVAILABLE = False
 
 try:
-    import cv2
+    import cv2  # type: ignore
     CV2_AVAILABLE = True
-except ImportError:
+except Exception:
     CV2_AVAILABLE = False
 
 try:
@@ -18,7 +18,7 @@ try:
     import moviepy.video.fx as vfx
     MOVIEPY_V2 = True
 except ImportError:
-    from moviepy.editor import VideoClip, vfx
+    from moviepy.editor import VideoClip, vfx  # type: ignore
     MOVIEPY_V2 = False
 from typing import cast
 
@@ -57,17 +57,22 @@ def create_ken_burns_clip(
         w_base = W0
         h_base = W0 / r_target
 
-    use_gpu = TORCH_AVAILABLE and torch.cuda.is_available()
-    if use_gpu:
+    use_gpu = False
+    if TORCH_AVAILABLE:
         try:
-            # Load image onto GPU VRAM! Uses GPU and System RAM!
-            img_np = np.array(img)
-            img_gpu = torch.from_numpy(img_np).permute(2, 0, 1).unsqueeze(0).float().cuda() / 255.0
+            if torch.cuda.is_available():
+                # Load image onto GPU VRAM! Uses GPU and System RAM!
+                img_np = np.array(img).copy()
+                img_gpu = torch.from_numpy(img_np).permute(2, 0, 1).unsqueeze(0).float().cuda() / 255.0
+                use_gpu = True
         except Exception:
             use_gpu = False
             
     if not use_gpu and CV2_AVAILABLE:
-        img_np = np.array(img)
+        try:
+            img_np = np.array(img).copy()
+        except Exception:
+            pass
 
     def make_frame(t):
         p = min(1.0, max(0.0, t / duration)) if duration > 0 else 0.0
@@ -108,28 +113,36 @@ def create_ken_burns_clip(
         bottom = yc + h_crop / 2.0
 
         if use_gpu:
-            l_idx = int(max(0, left))
-            t_idx = int(max(0, top))
-            r_idx = int(min(W0, right))
-            b_idx = int(min(H0, bottom))
-            if r_idx <= l_idx or b_idx <= t_idx:
-                l_idx, t_idx, r_idx, b_idx = 0, 0, W0, H0
-            crop_gpu = img_gpu[:, :, t_idx:b_idx, l_idx:r_idx]
-            res_gpu = F.interpolate(crop_gpu, size=(target_h, target_w), mode='bilinear', align_corners=False)
-            return (res_gpu.squeeze(0).permute(1, 2, 0) * 255.0).byte().cpu().numpy()
-        elif CV2_AVAILABLE:
-            l_idx = int(max(0, left))
-            t_idx = int(max(0, top))
-            r_idx = int(min(W0, right))
-            b_idx = int(min(H0, bottom))
-            if r_idx <= l_idx or b_idx <= t_idx:
-                l_idx, t_idx, r_idx, b_idx = 0, 0, W0, H0
-            cropped = img_np[t_idx:b_idx, l_idx:r_idx]
-            return cv2.resize(cropped, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
-        else:
-            cropped = img.crop((left, top, right, bottom))
-            resized = cropped.resize(target_size, Image.Resampling.BICUBIC)
-            return np.array(resized)
+            try:
+                l_idx = int(max(0, left))
+                t_idx = int(max(0, top))
+                r_idx = int(min(W0, right))
+                b_idx = int(min(H0, bottom))
+                if r_idx <= l_idx or b_idx <= t_idx:
+                    l_idx, t_idx, r_idx, b_idx = 0, 0, W0, H0
+                crop_gpu = img_gpu[:, :, t_idx:b_idx, l_idx:r_idx]
+                res_gpu = F.interpolate(crop_gpu, size=(target_h, target_w), mode='bilinear', align_corners=False)
+                res_clamped = torch.clamp(res_gpu.squeeze(0).permute(1, 2, 0) * 255.0, 0, 255).to(torch.uint8)
+                return res_clamped.cpu().numpy()
+            except Exception:
+                pass
+                
+        if CV2_AVAILABLE:
+            try:
+                l_idx = int(max(0, left))
+                t_idx = int(max(0, top))
+                r_idx = int(min(W0, right))
+                b_idx = int(min(H0, bottom))
+                if r_idx <= l_idx or b_idx <= t_idx:
+                    l_idx, t_idx, r_idx, b_idx = 0, 0, W0, H0
+                cropped = img_np[t_idx:b_idx, l_idx:r_idx]
+                return cv2.resize(cropped, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+            except Exception:
+                pass
+
+        cropped = img.crop((left, top, right, bottom))
+        resized = cropped.resize(target_size, Image.Resampling.BICUBIC)
+        return np.array(resized)
 
     clip = VideoClip(make_frame, duration=duration)
     
