@@ -113,7 +113,18 @@ video { border-radius: 6px !important; border: 1px solid #2a2a4a !important; }
     font-family: 'Consolas', 'Fira Code', monospace !important;
     font-size: 12px !important;
 }
+
+/* Hide bridge textbox without removing it from DOM (visible=False destroys DOM in Svelte!) */
+#timeline-json-bridge {
+    display: none !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    position: absolute !important;
+    pointer-events: none !important;
+}
 """
+
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -343,16 +354,20 @@ async () => {
     window.__startEdited = function() { syncOnly(); };
 
     function pushToGradio(data) {
-        const el = document.querySelector('#timeline-json-bridge textarea');
-        if (el) {
-            const nativeSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLTextAreaElement.prototype, 'value'
-            ).set;
-            nativeSetter.call(el, JSON.stringify(data));
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+        const container = document.getElementById('timeline-json-bridge');
+        if (!container) return;
+        const el = container.querySelector('textarea, input');
+        if (!el) return;
+        
+        const proto = el.tagName.toLowerCase() === 'textarea' 
+            ? window.HTMLTextAreaElement.prototype 
+            : window.HTMLInputElement.prototype;
+        const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+        nativeSetter.call(el, JSON.stringify(data));
+        el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
     }
+
 
     function updateStats(rows) {
         const statsEl = document.getElementById('tl-stats');
@@ -434,40 +449,13 @@ async () => {
     });
     observer.observe(document.body, { childList: true, subtree: true });
     initSortable();
+    recalcAndSync();
 }
 """
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  JS that reads current DOM timeline state at button-click time.
-#  Injected via js= parameter on .click() to guarantee fresh data
-#  regardless of Gradio's internal Svelte/React state management.
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-READ_TIMELINE_JS = """
-(...args) => {
-    const tbody = document.getElementById('timeline-tbody');
-    if (tbody) {
-        const rows = tbody.querySelectorAll('tr');
-        const data = [];
-        rows.forEach((tr) => {
-            const s = tr.querySelector('input[data-field="start"]');
-            const d = tr.querySelector('input[data-field="duration"]');
-            data.push({
-                path: tr.getAttribute('data-path') || '',
-                filename: tr.getAttribute('data-filename') || '',
-                start: s ? s.value : '0.0',
-                duration: d ? d.value : '5.0'
-            });
-        });
-        // Replace the last argument (timeline_json_bridge) with fresh DOM data
-        args[args.length - 1] = JSON.stringify(data);
-    }
-    return args;
-}
-"""
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  Backend Functions
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -837,12 +825,13 @@ with gr.Blocks(**blocks_kwargs) as demo:
                 label="Timeline"
             )
 
-            # Hidden JSON bridge
+            # Hidden JSON bridge (kept in DOM via CSS so JS can manipulate it)
             timeline_json_bridge = gr.Textbox(
                 value="[]",
-                visible=False,
+                lines=2,
                 elem_id="timeline-json-bridge"
             )
+
 
             # ── Export & Preview ──
             gr.HTML("""
@@ -894,8 +883,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
             res_dropdown, fps_dropdown, transition_slider, mapping_radio,
             timeline_json_bridge
         ],
-        outputs=[output_video, output_status],
-        js=READ_TIMELINE_JS
+        outputs=[output_video, output_status]
     )
 
     # Initialize SortableJS on page load
