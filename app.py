@@ -369,6 +369,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
                 gr.Markdown("### 🕒 Step 2: Fine-Tune Start Timestamps\nSet the exact timestamp (e.g., `0:00`, `0:08`, `0:15`) when each image should appear!")
                 timeline_table = gr.Dataframe(
                     headers=["Preview", "Image Filename", "Start Timestamp (s)", "Duration (s) (Optional)"],
+                    datatype=["html", "str", "str", "str"], # type: ignore
                     interactive=True,
                     label="Custom Timeline Table"
                 )
