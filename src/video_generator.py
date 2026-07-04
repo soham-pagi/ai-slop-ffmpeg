@@ -37,10 +37,10 @@ def get_optimal_video_settings() -> tuple:
                 print("\n" + "="*60)
                 print(" 🚀 [GPU Acceleration Active] NVIDIA GPU Detected (RTX / T4)")
                 print("    -> Hardware Encoder: h264_nvenc")
-                print("    -> Encoding Preset:  fast")
+                print("    -> Encoding Preset:  p4 (NVIDIA GPU Standard)")
                 print(f"    -> CPU Threads:      {threads}")
                 print("="*60 + "\n")
-                return "h264_nvenc", "fast", threads
+                return "h264_nvenc", "p4", threads
     except Exception:
         pass
     
@@ -181,10 +181,34 @@ def generate_video(
             codec=codec,
             audio_codec="aac",
             threads=threads,
-            preset=preset
+            preset=preset,
+            ffmpeg_params=["-pix_fmt", "yuv420p"] if codec == "h264_nvenc" else None
         )
     except Exception as e:
-        if codec != "libx264":
+        if codec == "h264_nvenc":
+            try:
+                print(f"\n[Warning] NVENC preset '{preset}' failed. Retrying GPU encoding with preset='default'...")
+                final_video.write_videofile(
+                    output_path,
+                    fps=fps,
+                    codec="h264_nvenc",
+                    audio_codec="aac",
+                    threads=threads,
+                    preset="default",
+                    ffmpeg_params=["-pix_fmt", "yuv420p"]
+                )
+            except Exception as e2:
+                print(f"\n[Warning] Hardware GPU encoding failed in MoviePy backend: {str(e2)[:150]}...")
+                print("          -> Automatically falling back to high-speed CPU multi-threading (libx264, preset=ultrafast)!\n")
+                final_video.write_videofile(
+                    output_path,
+                    fps=fps,
+                    codec="libx264",
+                    audio_codec="aac",
+                    threads=threads,
+                    preset="ultrafast"
+                )
+        elif codec != "libx264":
             print(f"\n[Warning] Hardware GPU encoding ({codec}) failed in MoviePy backend: {str(e)[:150]}...")
             print("          -> Automatically falling back to high-speed CPU multi-threading (libx264, preset=ultrafast)!\n")
             final_video.write_videofile(

@@ -57,6 +57,16 @@ def create_ken_burns_clip(
         w_base = W0
         h_base = W0 / r_target
 
+    use_gpu = False
+    if TORCH_AVAILABLE:
+        try:
+            if torch.cuda.is_available():
+                img_np_copy = np.array(img).copy()
+                img_gpu = torch.from_numpy(img_np_copy).permute(2, 0, 1).unsqueeze(0).float().cuda() / 255.0
+                use_gpu = True
+        except Exception:
+            use_gpu = False
+
     if CV2_AVAILABLE:
         try:
             img_np = np.array(img).copy()
@@ -101,6 +111,22 @@ def create_ken_burns_clip(
         
         # Sub-pixel affine scale ratio from output frame pixel to input image pixel
         k = w_crop / target_w
+
+        if use_gpu:
+            try:
+                # Sub-pixel bicubic grid sampling on NVIDIA GPU VRAM
+                tx = (2.0 * pan_x * max_shift_x) / W0
+                ty = (2.0 * pan_y * max_shift_y) / H0
+                theta = torch.tensor([[
+                    [1.0 / scale, 0.0, tx],
+                    [0.0, 1.0 / scale, ty]
+                ]], dtype=torch.float32, device=img_gpu.device)
+                grid = F.affine_grid(theta, size=(1, 3, target_h, target_w), align_corners=False)
+                res_gpu = F.grid_sample(img_gpu, grid, mode='bicubic', padding_mode='reflection', align_corners=False)
+                res_clamped = torch.clamp(res_gpu.squeeze(0).permute(1, 2, 0) * 255.0, 0, 255).to(torch.uint8)
+                return res_clamped.cpu().numpy()
+            except Exception:
+                pass
 
         if CV2_AVAILABLE:
             try:
