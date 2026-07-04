@@ -1,6 +1,7 @@
 import os
 import argparse
 import gradio as gr
+from typing import Any
 from src.video_generator import generate_video
 
 # Default paths matching project repository structure
@@ -105,7 +106,7 @@ def populate_timeline_table(script_mode, script_file, script_text, audio_file, i
         try:
             from moviepy import AudioFileClip
         except ImportError:
-            from moviepy.editor import AudioFileClip
+            from moviepy.editor import AudioFileClip # type: ignore
         
         images_source = ""
         if image_mode == "Select Local Folder" and images_folder and os.path.exists(images_folder):
@@ -147,7 +148,7 @@ def equalize_table_durations(audio_file, table_data):
         try:
             from moviepy import AudioFileClip
         except ImportError:
-            from moviepy.editor import AudioFileClip
+            from moviepy.editor import AudioFileClip # type: ignore
             
         if not audio_file or not os.path.exists(audio_file):
             dur = 5.0
@@ -171,9 +172,9 @@ try:
 except Exception:
     GRADIO_V6 = False
 
-blocks_kwargs = {"title": "Salt-2-Artstyle Video Generator"}
+blocks_kwargs: dict[str, Any] = {"title": "Salt-2-Artstyle Video Generator"}
 if not GRADIO_V6:
-    blocks_kwargs["theme"] = gr.themes.Soft()
+    blocks_kwargs["theme"] = gr.themes.Soft() # type: ignore
 
 # Build Gradio Interface
 with gr.Blocks(**blocks_kwargs) as demo:
@@ -280,9 +281,6 @@ with gr.Blocks(**blocks_kwargs) as demo:
                 
                 timeline_table = gr.Dataframe(
                     headers=["Order", "Image Filename", "Duration (s)"],
-                    datatype=["number", "str", "number"],
-                    row_count=(5, "dynamic"),
-                    col_count=(3, "fixed"),
                     interactive=True,
                     label="Custom Timeline Table"
                 )
@@ -324,8 +322,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print(f"\nLaunching Gradio Interface (Share={args.share}, Port={args.port}, Gradio v{gr.__version__})...")
-    launch_kwargs = {"share": args.share, "server_port": args.port}
+    launch_kwargs: dict[str, Any] = {"share": args.share, "server_port": args.port}
     if GRADIO_V6:
-        launch_kwargs["theme"] = gr.themes.Soft()
+        launch_kwargs["theme"] = gr.themes.Soft() # type: ignore
         
     demo.launch(**launch_kwargs)

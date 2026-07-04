@@ -4,7 +4,7 @@ from typing import Union, List, Optional, Callable
 try:
     from moviepy import concatenate_videoclips, AudioFileClip
 except ImportError:
-    from moviepy.editor import concatenate_videoclips, AudioFileClip
+    from moviepy.editor import concatenate_videoclips, AudioFileClip # type: ignore
 from .timestamp_parser import parse_script, parse_script_text
 from .image_mapper import map_images_to_timestamps, create_custom_timeline
 from .effects import create_ken_burns_clip
@@ -77,7 +77,7 @@ def generate_video(
             progress_callback(0.2, "Building custom timeline from manual table...")
         mapped_clips = create_custom_timeline(images_source, custom_timeline)
         print(f"      -> Generated {len(mapped_clips)} clip assignments from manual table.")
-    elif script_source and str(script_source).strip():
+    elif script_source and script_source.strip():
         if progress_callback:
             progress_callback(0.1, "Parsing script timestamps...")
 
