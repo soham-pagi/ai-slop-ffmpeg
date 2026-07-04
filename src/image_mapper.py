@@ -213,7 +213,7 @@ def find_matching_image(filename: str, image_paths: List[str], path_map: dict) -
 
 def create_custom_timeline(
     images_source: Union[str, List[str]],
-    timeline_rows: List[List[Any]],
+    timeline_rows: Any,
     audio_duration: float = 0.0
 ) -> List[MappedClip]:
     """
@@ -227,10 +227,17 @@ def create_custom_timeline(
         
     path_map = {os.path.basename(p): p for p in image_paths}
     
+    if hasattr(timeline_rows, "values"):
+        timeline_rows = timeline_rows.values.tolist()
+    elif hasattr(timeline_rows, "to_numpy"):
+        timeline_rows = timeline_rows.to_numpy().tolist()
+    elif isinstance(timeline_rows, dict) and "data" in timeline_rows:
+        timeline_rows = timeline_rows["data"]
+    
     # 1. Parse rows into structured list: (filename, start_val, dur_val)
     parsed_items = []
     for row in timeline_rows:
-        if not row or len(row) < 2:
+        if not row or not isinstance(row, (list, tuple)) or len(row) < 2:
             continue
             
         if len(row) == 3:

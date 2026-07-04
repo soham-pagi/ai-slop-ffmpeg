@@ -67,10 +67,18 @@ def run_gradio_generation(
 
         # 6. Check Custom Timeline Table
         custom_tl = None
-        if timeline_table is not None and hasattr(timeline_table, "__len__") and len(timeline_table) > 0:
-            valid_rows = [row for row in timeline_table if row and len(row) >= 3 and str(row[1]).strip() != "" and "Please select" not in str(row[1]) and "Error:" not in str(row[1])]
-            if len(valid_rows) > 0:
-                custom_tl = valid_rows
+        if timeline_table is not None:
+            if hasattr(timeline_table, "values"):
+                timeline_table = timeline_table.values.tolist()
+            elif hasattr(timeline_table, "to_numpy"):
+                timeline_table = timeline_table.to_numpy().tolist()
+            elif isinstance(timeline_table, dict) and "data" in timeline_table:
+                timeline_table = timeline_table["data"]
+                
+            if hasattr(timeline_table, "__len__") and len(timeline_table) > 0:
+                valid_rows = [row for row in timeline_table if isinstance(row, (list, tuple)) and len(row) >= 3 and str(row[1]).strip() != "" and "Please select" not in str(row[1]) and "Error:" not in str(row[1])]
+                if len(valid_rows) > 0:
+                    custom_tl = valid_rows
 
         # 7. Progress Callback
         def progress_cb(pct, msg):
@@ -367,6 +375,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
             timeline_table = gr.Dataframe(
                 headers=["Preview", "Image Filename", "Start Timestamp (s)", "Duration (s) (Optional)"],
                 datatype=["html", "str", "str", "str"], # type: ignore
+                type="array", # type: ignore
                 interactive=True,
                 max_height=600,
                 column_widths=[120, 280, 160, 160],
