@@ -8,6 +8,70 @@ except ImportError:
 from .timestamp_parser import parse_script, parse_script_text
 from .image_mapper import map_images_to_timestamps, create_custom_timeline
 from .effects import create_ken_burns_clip
+import numpy as np
+
+
+def export_video_with_gpu_pipe(final_video, output_path: str, fps: int, progress_callback: Optional[Callable] = None):
+    """
+    Directly pipes raw video frames from MoviePy/PyTorch to an FFmpeg subprocess
+    configured for NVIDIA GPU NVENC hardware encoding (h264_nvenc).
+    Bypasses MoviePy's writer which is incompatible with NVENC on Kaggle.
+    """
+    temp_audio = output_path + ".temp_audio.aac"
+    has_audio = getattr(final_video, "audio", None) is not None
+    if has_audio:
+        try:
+            final_video.audio.write_audiofile(temp_audio, fps=44100, logger=None)
+        except Exception as e:
+            print(f"[Warning] Could not export temporary audio for GPU pipe: {e}")
+            has_audio = False
+
+    width, height = final_video.w, final_video.h
+    command = [
+        "ffmpeg", "-y",
+        "-f", "rawvideo",
+        "-vcodec", "rawvideo",
+        "-s", f"{width}x{height}",
+        "-pix_fmt", "rgb24",
+        "-r", str(fps),
+        "-i", "-"
+    ]
+    if has_audio and os.path.exists(temp_audio):
+        command.extend(["-i", temp_audio, "-c:a", "copy"])
+
+    command.extend([
+        "-c:v", "h264_nvenc",
+        "-preset", "p4",
+        "-pix_fmt", "yuv420p",
+        "-shortest",
+        output_path
+    ])
+
+    print("\n" + "="*60)
+    print(" 🚀 [GPU NVENC Subprocess Pipe Active] Streaming frames directly to NVIDIA GPU!")
+    print(f"    -> Command: {' '.join(command)}")
+    print("="*60 + "\n")
+
+    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+    total_frames = int(final_video.duration * fps)
+    for i, t in enumerate(np.arange(0, final_video.duration, 1.0 / fps)):
+        frame = final_video.get_frame(t)
+        process.stdin.write(frame.tobytes())
+        if progress_callback and total_frames > 0 and i % 15 == 0:
+            progress_callback(0.85 + 0.15 * (i / total_frames), f"GPU NVENC Encoding frame {i}/{total_frames}...")
+            
+    process.stdin.close()
+    process.wait()
+    
+    if os.path.exists(temp_audio):
+        try:
+            os.remove(temp_audio)
+        except Exception:
+            pass
+            
+    if process.returncode != 0:
+        raise RuntimeError(f"GPU NVENC subprocess failed with returncode {process.returncode}")
 
 
 def get_optimal_video_settings() -> tuple:
@@ -174,42 +238,11 @@ def generate_video(
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
     codec, preset, threads = get_optimal_video_settings()
-    try:
-        final_video.write_videofile(
-            output_path,
-            fps=fps,
-            codec=codec,
-            audio_codec="aac",
-            threads=threads,
-            preset=preset,
-            ffmpeg_params=["-pix_fmt", "yuv420p"] if codec == "h264_nvenc" else None
-        )
-    except Exception as e:
-        if codec == "h264_nvenc":
-            try:
-                print(f"\n[Warning] NVENC preset '{preset}' failed. Retrying GPU encoding with preset='default'...")
-                final_video.write_videofile(
-                    output_path,
-                    fps=fps,
-                    codec="h264_nvenc",
-                    audio_codec="aac",
-                    threads=threads,
-                    preset="default",
-                    ffmpeg_params=["-pix_fmt", "yuv420p"]
-                )
-            except Exception as e2:
-                print(f"\n[Warning] Hardware GPU encoding failed in MoviePy backend: {str(e2)[:150]}...")
-                print("          -> Automatically falling back to high-speed CPU multi-threading (libx264, preset=ultrafast)!\n")
-                final_video.write_videofile(
-                    output_path,
-                    fps=fps,
-                    codec="libx264",
-                    audio_codec="aac",
-                    threads=threads,
-                    preset="ultrafast"
-                )
-        elif codec != "libx264":
-            print(f"\n[Warning] Hardware GPU encoding ({codec}) failed in MoviePy backend: {str(e)[:150]}...")
+    if codec == "h264_nvenc":
+        try:
+            export_video_with_gpu_pipe(final_video, output_path, fps, progress_callback)
+        except Exception as e:
+            print(f"\n[Warning] Direct GPU NVENC subprocess pipe failed: {str(e)[:150]}...")
             print("          -> Automatically falling back to high-speed CPU multi-threading (libx264, preset=ultrafast)!\n")
             final_video.write_videofile(
                 output_path,
@@ -219,8 +252,30 @@ def generate_video(
                 threads=threads,
                 preset="ultrafast"
             )
-        else:
-            raise
+    else:
+        try:
+            final_video.write_videofile(
+                output_path,
+                fps=fps,
+                codec=codec,
+                audio_codec="aac",
+                threads=threads,
+                preset=preset
+            )
+        except Exception as e:
+            if codec != "libx264":
+                print(f"\n[Warning] Encoding ({codec}) failed: {str(e)[:150]}...")
+                print("          -> Automatically falling back to high-speed CPU multi-threading (libx264, preset=ultrafast)!\n")
+                final_video.write_videofile(
+                    output_path,
+                    fps=fps,
+                    codec="libx264",
+                    audio_codec="aac",
+                    threads=threads,
+                    preset="ultrafast"
+                )
+            else:
+                raise
 
     if progress_callback:
         progress_callback(1.0, "Video generation complete!")

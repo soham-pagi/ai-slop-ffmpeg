@@ -77,20 +77,20 @@ def create_ken_burns_clip(
         p = min(1.0, max(0.0, t / duration)) if duration > 0 else 0.0
 
         if effect_type == "zoom_in":
-            scale = 1.0 + 0.15 * p
+            scale = 1.0 + 0.20 * p
             pan_x = 0.0
             pan_y = 0.0
         elif effect_type == "zoom_out":
-            scale = 1.15 - 0.15 * p
+            scale = 1.20 - 0.20 * p
             pan_x = 0.0
             pan_y = 0.0
         elif effect_type == "pan_right_zoom_in":
-            scale = 1.05 + 0.10 * p
-            pan_x = -0.03 + 0.06 * p
+            scale = 1.10 + 0.15 * p  # Zoom in 15% to create generous margin for smooth panning
+            pan_x = -0.85 + 1.70 * p # Pan smoothly across 85% of available width from left to right
             pan_y = 0.0
         elif effect_type == "pan_left_zoom_in":
-            scale = 1.05 + 0.10 * p
-            pan_x = 0.03 - 0.06 * p
+            scale = 1.10 + 0.15 * p  # Zoom in 15%
+            pan_x = 0.85 - 1.70 * p  # Pan smoothly across 85% of available width from right to left
             pan_y = 0.0
         else:
             scale = 1.0
@@ -114,7 +114,7 @@ def create_ken_burns_clip(
 
         if use_gpu:
             try:
-                # Sub-pixel bicubic grid sampling on NVIDIA GPU VRAM
+                # Sub-pixel bilinear grid sampling on NVIDIA GPU VRAM (eliminates texture vibration)
                 tx = (2.0 * pan_x * max_shift_x) / W0
                 ty = (2.0 * pan_y * max_shift_y) / H0
                 theta = torch.tensor([[
@@ -122,7 +122,7 @@ def create_ken_burns_clip(
                     [0.0, 1.0 / scale, ty]
                 ]], dtype=torch.float32, device=img_gpu.device)
                 grid = F.affine_grid(theta, size=(1, 3, target_h, target_w), align_corners=False)
-                res_gpu = F.grid_sample(img_gpu, grid, mode='bicubic', padding_mode='reflection', align_corners=False)
+                res_gpu = F.grid_sample(img_gpu, grid, mode='bilinear', padding_mode='reflection', align_corners=False)
                 res_clamped = torch.clamp(res_gpu.squeeze(0).permute(1, 2, 0) * 255.0, 0, 255).to(torch.uint8)
                 return res_clamped.cpu().numpy()
             except Exception:
@@ -139,7 +139,7 @@ def create_ken_burns_clip(
                     img_np,
                     M,
                     (target_w, target_h),
-                    flags=cv2.INTER_CUBIC | cv2.WARP_INVERSE_MAP,
+                    flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP,
                     borderMode=cv2.BORDER_REFLECT_101
                 )
             except Exception:
@@ -151,7 +151,7 @@ def create_ken_burns_clip(
             target_size,
             Image.Transform.AFFINE,
             data=matrix,
-            resample=Image.Resampling.BICUBIC
+            resample=Image.Resampling.BILINEAR
         )
         return np.array(resized)
 
