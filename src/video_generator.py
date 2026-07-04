@@ -47,10 +47,10 @@ def get_optimal_video_settings() -> tuple:
     print("\n" + "="*60)
     print(" 💻 [CPU Multi-Threading Active] Using libx264 software video encoding")
     print("    -> Software Encoder: libx264")
-    print("    -> Encoding Preset:  superfast (High Speed CPU)")
+    print("    -> Encoding Preset:  ultrafast (Maximum Speed CPU)")
     print(f"    -> CPU Threads:      {threads}")
     print("="*60 + "\n")
-    return "libx264", "superfast", threads
+    return "libx264", "ultrafast", threads
 
 
 def generate_video(
@@ -186,14 +186,14 @@ def generate_video(
     except Exception as e:
         if codec != "libx264":
             print(f"\n[Warning] Hardware GPU encoding ({codec}) failed in MoviePy backend: {str(e)[:150]}...")
-            print("          -> Automatically falling back to high-speed CPU multi-threading (libx264, preset=superfast)!\n")
+            print("          -> Automatically falling back to high-speed CPU multi-threading (libx264, preset=ultrafast)!\n")
             final_video.write_videofile(
                 output_path,
                 fps=fps,
                 codec="libx264",
                 audio_codec="aac",
                 threads=threads,
-                preset="superfast"
+                preset="ultrafast"
             )
         else:
             raise
