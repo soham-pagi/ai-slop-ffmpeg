@@ -20,7 +20,7 @@ try:
 except ImportError:
     from moviepy.editor import VideoClip, vfx  # type: ignore
     MOVIEPY_V2 = False
-from typing import cast
+from typing import cast, Optional
 
 
 def create_ken_burns_clip(
