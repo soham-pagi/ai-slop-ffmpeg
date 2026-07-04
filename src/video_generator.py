@@ -143,7 +143,8 @@ def generate_video(
     is_script_text: bool = False,
     progress_callback: Optional[Callable] = None,
     custom_timeline: Optional[List[list]] = None,
-    effect_strategy: str = "Random (No Repeats)"
+    effect_strategy: str = "Random (No Repeats)",
+    transition_style: str = "Cross-Dissolve (Hollywood Blend)"
 ):
     """
     Orchestrates parsing, image mapping, Ken Burns animation, audio syncing, and video export.
@@ -233,23 +234,34 @@ def generate_video(
             last_effect = effect
 
         print(f"      - Clip {i+1:02d}/{len(mapped_clips):02d}: {os.path.basename(mc.image_path)} "
-              f"({mc.duration:.2f}s, Segment #{mc.segment_index}) -> Effect: {effect}")
+              f"({mc.duration:.2f}s, Segment #{mc.segment_index}) -> Effect: {effect} | Transition: {transition_style}")
         
+        # For Hollywood Cross-Dissolve, extend clip duration by transition_duration so negative padding overlap preserves exact timestamps!
+        clip_dur = mc.duration
+        if transition_style in ["Cross-Dissolve (Hollywood Blend)", "Random Cinematic"] and i > 0 and transition_duration > 0:
+            clip_dur += transition_duration
+
         clip = create_ken_burns_clip(
             image_path=mc.image_path,
-            duration=mc.duration,
+            duration=clip_dur,
             effect_type=effect,
             target_size=resolution,
             fps=fps,
-            transition_duration=transition_duration
+            transition_duration=transition_duration,
+            transition_style=transition_style
         )
         video_clips.append(clip)
 
     if progress_callback:
         progress_callback(0.75, "Concatenating video clips and syncing audio...")
 
-    print(f"[4/5] Concatenating clips and synchronizing audio...")
-    final_video = concatenate_videoclips(video_clips, method="compose")
+    print(f"[4/5] Concatenating clips and synchronizing audio (Style: {transition_style})...")
+    pad = -transition_duration if transition_style in ["Cross-Dissolve (Hollywood Blend)", "Random Cinematic"] and transition_duration > 0 else 0
+    try:
+        final_video = concatenate_videoclips(video_clips, method="compose", padding=pad)
+    except TypeError:
+        # Fallback if moviepy version doesn't accept padding in compose
+        final_video = concatenate_videoclips(video_clips, method="compose")
 
     if not audio_clip and audio_path and os.path.exists(audio_path):
         try:

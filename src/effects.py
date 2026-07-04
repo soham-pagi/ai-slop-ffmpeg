@@ -29,7 +29,8 @@ def create_ken_burns_clip(
     effect_type: str = "zoom_in",
     target_size: tuple = (1920, 1080),
     fps: int = 60,
-    transition_duration: float = 0.4
+    transition_duration: float = 0.4,
+    transition_style: str = "Cross-Dissolve (Hollywood Blend)"
 ) -> VideoClip:
     """
     Creates a video clip from an image with Ken Burns zoom/pan animation and fade transitions.
@@ -199,26 +200,60 @@ def create_ken_burns_clip(
     else:
         setattr(clip, "fps", fps)
 
-    # Apply smooth cinematic fade in/out transitions (compatible with MoviePy 1.x and 2.x)
+    # Apply Hollywood-grade transitions (eliminating blackouts)
     fade_dur = 0.0
     if transition_duration > 0 and duration > transition_duration * 2:
         fade_dur = transition_duration
     elif transition_duration > 0 and duration > transition_duration:
         fade_dur = duration / 3.0
 
-    if fade_dur > 0:
-        if MOVIEPY_V2 and hasattr(vfx, "FadeIn"):
-            effects = [vfx.FadeIn(fade_dur), vfx.FadeOut(fade_dur)]
-            if hasattr(clip, "with_effects"):
-                clip = clip.with_effects(effects)
-            elif hasattr(clip, "fx"):
-                for fx_func in effects:
-                    clip = clip.fx(fx_func)
+    if transition_style == "Random Cinematic":
+        import random
+        transition_style = random.choice(["Cross-Dissolve (Hollywood Blend)", "Flash / Dip to White", "Clean Cut (No Fade)"])
+
+    if fade_dur > 0 and transition_style != "Clean Cut (No Fade)":
+        if transition_style == "Dip to Black":
+            # Classic fade out to black and fade in from black
+            if MOVIEPY_V2 and hasattr(vfx, "FadeIn"):
+                effects = [vfx.FadeIn(fade_dur), vfx.FadeOut(fade_dur)]
+                if hasattr(clip, "with_effects"):
+                    clip = clip.with_effects(effects)
+                elif hasattr(clip, "fx"):
+                    for fx_func in effects:
+                        clip = clip.fx(fx_func)
+            else:
+                if hasattr(clip, "fadein"):
+                    clip = clip.fadein(fade_dur)
+                if hasattr(clip, "fadeout"):
+                    clip = clip.fadeout(fade_dur)
+        elif transition_style == "Flash / Dip to White":
+            # Flash to pure white at cuts (high energy trailer style, zero blackout!)
+            def flash_white_filter(get_frame_func, t):
+                frame = get_frame_func(t)
+                frame_float = frame.astype(np.float32)
+                if t < fade_dur:
+                    alpha = t / fade_dur
+                    res = frame_float * alpha + 255.0 * (1.0 - alpha)
+                elif t > duration - fade_dur:
+                    alpha = (duration - t) / fade_dur
+                    res = frame_float * alpha + 255.0 * (1.0 - alpha)
+                else:
+                    return frame
+                return np.clip(res, 0, 255).astype(np.uint8)
+            
+            if hasattr(clip, "fl"):
+                clip = clip.fl(flash_white_filter)
         else:
-            # MoviePy 1.x fallback
-            if hasattr(clip, "fadein"):
-                clip = clip.fadein(fade_dur)
-            if hasattr(clip, "fadeout"):
-                clip = clip.fadeout(fade_dur)
+            # "Cross-Dissolve (Hollywood Blend)" or default
+            # Only apply FadeIn (or crossfadein) so the previous clip stays full brightness underneath!
+            # ZERO blackout!
+            if MOVIEPY_V2 and hasattr(vfx, "FadeIn"):
+                if hasattr(clip, "with_effects"):
+                    clip = clip.with_effects([vfx.FadeIn(fade_dur)])
+                elif hasattr(clip, "fx"):
+                    clip = clip.fx(vfx.FadeIn(fade_dur))
+            else:
+                if hasattr(clip, "fadein"):
+                    clip = clip.fadein(fade_dur)
 
     return cast(VideoClip, clip)

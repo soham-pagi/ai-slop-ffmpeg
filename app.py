@@ -586,7 +586,7 @@ def run_gradio_generation(
     script_mode, script_file, script_text, audio_file,
     image_mode, images_folder, uploaded_images,
     res_str, fps, transition, mapping_mode,
-    timeline_json_str, effect_strategy="Random (No Repeats)", progress=gr.Progress()
+    timeline_json_str, effect_strategy="Random (No Repeats)", transition_style="Cross-Dissolve (Hollywood Blend)", progress=gr.Progress()
 ):
     try:
         # 1. Resolve Script Source (Optional)
@@ -665,7 +665,8 @@ def run_gradio_generation(
             is_script_text=is_script_text,
             progress_callback=progress_cb,
             custom_timeline=custom_tl,
-            effect_strategy=effect_strategy
+            effect_strategy=effect_strategy,
+            transition_style=transition_style
         )
 
         return result_video, f"✅ Export complete → {result_video}"
@@ -800,6 +801,11 @@ with gr.Blocks(**blocks_kwargs) as demo:
                         label="Transition (s)"
                     )
                 with gr.Row():
+                    transition_style_dropdown = gr.Dropdown(
+                        choices=["Cross-Dissolve (Hollywood Blend)", "Flash / Dip to White", "Random Cinematic", "Clean Cut (No Fade)", "Dip to Black"],
+                        value="Cross-Dissolve (Hollywood Blend)",
+                        label="Transition Style"
+                    )
                     effect_strategy_dropdown = gr.Dropdown(
                         choices=["Random (No Repeats)", "Cycle All (Ordered)", "Zoom Only", "Pan Only", "Dynamic Diagonals"],
                         value="Random (No Repeats)",
@@ -888,7 +894,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
             script_mode, script_file, script_text, audio_file,
             image_mode, images_folder, uploaded_images,
             res_dropdown, fps_dropdown, transition_slider, mapping_radio,
-            timeline_json_bridge, effect_strategy_dropdown
+            timeline_json_bridge, effect_strategy_dropdown, transition_style_dropdown
         ],
         outputs=[output_video, output_status]
     )
