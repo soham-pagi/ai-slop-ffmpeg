@@ -1019,6 +1019,33 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=7860, help="Port to run the server on")
     args = parser.parse_args()
 
+    print("\n" + "="*60)
+    print(" 🛠️  SYSTEM & GPU HARDWARE DIAGNOSTICS")
+    print("="*60)
+    try:
+        import torch
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            print(f"  [✓] PyTorch CUDA: AVAILABLE ({gpu_name}, {vram_gb:.2f} GB VRAM)")
+            print(f"      -> Ken Burns animations will render 100% on GPU!")
+        else:
+            print("  [✗] PyTorch CUDA: NOT AVAILABLE (Using CPU / OpenCV fallback)")
+    except Exception as e:
+        print(f"  [✗] PyTorch CUDA: Check failed ({e})")
+
+    try:
+        import subprocess
+        res = subprocess.run(["ffmpeg", "-encoders"], capture_output=True, text=True)
+        if "h264_nvenc" in res.stdout:
+            print("  [✓] FFmpeg NVENC: AVAILABLE (NVIDIA Hardware Encoding Enabled)")
+            print("      -> Video export will stream directly to GPU NVENC!")
+        else:
+            print("  [✗] FFmpeg NVENC: NOT AVAILABLE (Using CPU libx264 fallback)")
+    except Exception as e:
+        print(f"  [✗] FFmpeg NVENC: Check failed ({e})")
+    print("="*60 + "\n")
+
     print(f"\nLaunching AI Video Maker (Share={args.share}, Port={args.port}, Gradio v{gr.__version__})...")
     launch_kwargs: dict[str, Any] = {"share": args.share, "server_port": args.port}
     if GRADIO_V6:
