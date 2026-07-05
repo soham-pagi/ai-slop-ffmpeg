@@ -1,4 +1,3 @@
-from src.video_generator import run_gradio_generation
 import os
 import json
 import argparse
@@ -7,7 +6,7 @@ import io
 import gradio as gr
 from typing import Any
 from PIL import Image
-from src.video_generator import generate_video
+from src.video_generator import generate_video, run_gradio_generation
 
 # Default paths matching project repository structure
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -719,101 +718,7 @@ def sync_timeline_bridge(val):
     return val
 
 
-def run_gradio_generation(
-    script_mode, script_file, script_text, audio_file,
-    image_mode, images_folder, uploaded_images,
-    res_str, fps, transition, mapping_mode,
-    timeline_json_str, effect_strategy="Random (No Consecutive Repeats)", transition_style="Random Cinematic", progress=gr.Progress()
-):
-    try:
-        # 1. Resolve Script Source (Optional)
-        script_source = None
-        is_script_text = False
-        if script_mode == "Upload File" and script_file:
-            script_source = script_file.name if hasattr(script_file, "name") else script_file
-        elif script_mode == "Paste Text" and script_text and script_text.strip():
-            script_source = script_text
-            is_script_text = True
-
-        # 2. Resolve Audio Source
-        audio_path = audio_file if audio_file else ""
-
-        # 3. Resolve Image Source
-        if image_mode == "Select Local Folder":
-            if not images_folder or not os.path.exists(images_folder):
-                raise ValueError(f"Images folder does not exist: {images_folder}")
-            images_source = images_folder
-        else:
-            if not uploaded_images:
-                raise ValueError("Please upload image files!")
-            images_source = [f.name if hasattr(f, "name") else f for f in uploaded_images]
-
-        # 4. Parse Resolution
-        try:
-            width, height = map(int, res_str.lower().split('x'))
-            resolution = (width, height)
-        except Exception:
-            raise ValueError(f"Invalid resolution format: {res_str}. Use WIDTHxHEIGHT (e.g., 1920x1080).")
-
-        # 5. Define Output Path
-        output_path = os.path.join(BASE_DIR, "output_video", "gradio_generated.mp4")
-
-        # 6. Check Custom Timeline from JSON bridge
-        #    The JS preprocessor (READ_TIMELINE_JS) injects fresh DOM data
-        #    into timeline_json_str at click time, so this is always up-to-date.
-        custom_tl = None
-        if timeline_json_str:
-            try:
-                tl_rows = json.loads(timeline_json_str)
-                if isinstance(tl_rows, list) and len(tl_rows) > 0:
-                    valid_rows = []
-                    for i, r in enumerate(tl_rows):
-                        fname = r.get("filename", "").strip()
-                        fpath = r.get("path", "").strip()
-                        # Prefer full path (exact), fall back to filename for matching
-                        identifier = fpath if (fpath and os.path.exists(fpath)) else fname
-                        if not identifier or "Please select" in identifier or "Error:" in identifier:
-                            continue
-                        start_str = r.get("start", "0.0")
-                        dur_str = r.get("duration", "5.0")
-                        eff_str = r.get("effect", "Random / Global")
-                        trans_str = r.get("transition", "Random / Global")
-                        valid_rows.append(["", identifier, start_str, dur_str, eff_str, trans_str])
-                    if valid_rows:
-                        custom_tl = valid_rows
-                        print(f"\n[Timeline Bridge] Received {len(valid_rows)} clips from UI:")
-                        for i, row in enumerate(valid_rows):
-                            print(f"  Clip {i+1}: {os.path.basename(row[1])}  start={row[2]}s  dur={row[3]}s  eff={row[4]}  trans={row[5]}")
-            except Exception as e:
-                print(f"[Timeline Bridge] JSON parse error: {e}")
-
-        # 7. Progress Callback
-        def progress_cb(pct, msg):
-            progress(pct, desc=msg)
-
-        # 8. Generate Video
-        result_video = generate_video(
-            script_source=script_source,
-            audio_path=audio_path,
-            images_source=images_source,
-            output_path=output_path,
-            mapping_mode=mapping_mode,
-            resolution=resolution,
-            fps=int(fps),
-            transition_duration=float(transition),
-            is_script_text=is_script_text,
-            progress_callback=progress_cb,
-            custom_timeline=custom_tl,
-            effect_strategy=effect_strategy,
-            transition_style=transition_style
-        )
-
-        return result_video, f"✅ Export complete → {result_video}"
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return None, f"❌ Error: {str(e)}"
+# Note: run_gradio_generation is imported from src.video_generator (native FFmpeg engine)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

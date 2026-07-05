@@ -10,7 +10,9 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
     prev_label = ""
     
     for i, item in enumerate(timeline_data):
-        img = item.get('path')
+        img = item.get('path') or item.get('filename') or ""
+        if not img or not os.path.exists(img):
+            raise FileNotFoundError(f"Image file not found for timeline item #{i+1}: '{img}'")
         inputs.extend(["-i", img])
     
     has_audio = audio_path and os.path.exists(audio_path)
@@ -20,7 +22,17 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
     for i, item in enumerate(timeline_data):
         dur = float(item.get('duration', 5.0))
         frames = max(1, int(dur * fps))
-        effect = random.choice(['zoom_in', 'zoom_out', 'pan_right', 'pan_left'])
+        eff_str = str(item.get('effect', '')).lower()
+        if 'zoom in' in eff_str or eff_str == 'zoom_in':
+            effect = 'zoom_in'
+        elif 'zoom out' in eff_str or eff_str == 'zoom_out':
+            effect = 'zoom_out'
+        elif 'pan right' in eff_str or eff_str == 'pan_right':
+            effect = 'pan_right'
+        elif 'pan left' in eff_str or eff_str == 'pan_left':
+            effect = 'pan_left'
+        else:
+            effect = random.choice(['zoom_in', 'zoom_out', 'pan_right', 'pan_left'])
         
         if effect == 'zoom_in': zp = f"z='min(zoom+0.0015,1.5)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
         elif effect == 'zoom_out': zp = f"z='if(eq(on,1),1.5,max(zoom-0.0015,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
@@ -64,7 +76,7 @@ def run_gradio_generation(script_mode, script_file, script_text, audio_file,
         w, h = map(int, res_dropdown.lower().split('x'))
         fps = int(fps_dropdown)
         trans_dur = float(transition_slider)
-        audio_path = audio_file.name if audio_file else None
+        audio_path = audio_file if isinstance(audio_file, str) else (audio_file.name if audio_file else None)
         
         os.makedirs("output_video", exist_ok=True)
         output_path = "output_video/native_render.mp4"
