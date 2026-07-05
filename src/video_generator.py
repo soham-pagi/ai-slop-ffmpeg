@@ -63,22 +63,23 @@ def export_video_with_gpu_pipe(final_video, output_path: str, fps: int, progress
             f"FFmpeg stderr:\n{stderr_output}"
         )
 
-    total_frames = int(final_video.duration * fps)
-    for i, t in enumerate(np.arange(0, final_video.duration, 1.0 / fps)):
-        frame = final_video.get_frame(t)
-        try:
-            process.stdin.write(frame.tobytes())
-        except BrokenPipeError:
-            stderr_output = process.stderr.read().decode(errors="replace") if process.stderr else "No stderr available"
-            raise RuntimeError(
-                f"FFmpeg GPU NVENC pipe broke while writing frame {i}/{total_frames}. "
-                f"FFmpeg stderr:\n{stderr_output}"
-            )
-        if progress_callback and total_frames > 0 and i % 15 == 0:
-            progress_callback(0.85 + 0.15 * (i / total_frames), f"GPU NVENC Encoding frame {i}/{total_frames}...")
-            
-    process.stdin.close()
-    process.wait()
+    total_frames = int(final_video.duration * fps) if final_video.duration else 0
+    try:
+        for i, frame in enumerate(final_video.iter_frames(fps=fps, dtype='uint8')):
+            try:
+                process.stdin.write(frame.tobytes())
+            except BrokenPipeError:
+                stderr_output = process.stderr.read().decode(errors="replace") if process.stderr else "No stderr available"
+                raise RuntimeError(
+                    f"FFmpeg GPU NVENC pipe broke while writing frame {i}/{total_frames}. "
+                    f"FFmpeg stderr:\n{stderr_output}"
+                )
+            if progress_callback and total_frames > 0 and i % 15 == 0:
+                progress_callback(0.85 + 0.15 * (i / total_frames), f"GPU NVENC Encoding frame {i}/{total_frames}...")
+    finally:
+        if process.stdin:
+            process.stdin.close()
+        process.wait()
     
     if os.path.exists(temp_audio):
         try:
