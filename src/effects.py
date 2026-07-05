@@ -31,8 +31,8 @@ def create_ken_burns_clip(
     target_size: tuple = (1920, 1080),
     fps: int = 60,
     transition_duration: float = 0.4,
-    start_transition: str = "Cross-Dissolve (Hollywood Blend)",
-    end_transition: str = "Cross-Dissolve (Hollywood Blend)",
+    start_transition: str = "Cross Dissolve",
+    end_transition: str = "Cross Dissolve",
     prev_image_path: Optional[str] = None,
     next_image_path: Optional[str] = None
 ) -> VideoClip:
@@ -40,6 +40,40 @@ def create_ken_burns_clip(
     Creates a video clip from an image with Ken Burns zoom/pan animation and fade transitions.
     Uses PyTorch GPU acceleration when available (Kaggle T4 / RTX 3050), or OpenCV/PIL fallback.
     """
+    EFFECT_MAP = {
+        "Slow Zoom In": "zoom_in",
+        "Slow Zoom Out": "zoom_out",
+        "Pan Right + Zoom In": "pan_right_zoom_in",
+        "Pan Left + Zoom In": "pan_left_zoom_in",
+        "Pan Up + Zoom In": "pan_up_zoom_in",
+        "Pan Down + Zoom In": "pan_down_zoom_in",
+        "Pan Right + Zoom Out": "pan_right_zoom_out",
+        "Pan Left + Zoom Out": "pan_left_zoom_out",
+        "Diagonal Up-Right + Zoom": "pan_up_right_zoom_in",
+        "Diagonal Down-Left + Zoom": "pan_down_left_zoom_in",
+        "Zoom In (Ease Out)": "zoom_in_fast_slow",
+        "Zoom Out (Ease In)": "zoom_out_slow_fast",
+        "Mirror Horizontal (MoviePy)": "mirror_x",
+        "Mirror Vertical (MoviePy)": "mirror_y",
+        "Black and White (MoviePy)": "black_and_white",
+        "Invert Colors (MoviePy)": "invert_colors",
+        "Static / No Effect": "none",
+        "none": "none",
+        "No Effect": "none"
+    }
+    TRANS_MAP = {
+        "Cross-Dissolve (Hollywood Blend)": "Cross Dissolve",
+        "Flash / Dip to White": "Dip to White",
+        "Dip to Black": "Dip to Black",
+        "Flash / Dip to Warm Gold": "Dip to Warm Gold",
+        "Flash / Dip to Cool Cyan": "Dip to Cool Cyan",
+        "Clean Cut (No Fade)": "Hard Cut (No Fade)",
+        "No Transition": "Hard Cut (No Fade)"
+    }
+    effect_type = EFFECT_MAP.get(effect_type, effect_type)
+    start_transition = TRANS_MAP.get(start_transition, start_transition)
+    end_transition = TRANS_MAP.get(end_transition, end_transition)
+
     # Load image once into memory
     img = Image.open(image_path).convert('RGB')
     target_w, target_h = target_size
@@ -51,16 +85,16 @@ def create_ken_burns_clip(
         new_w, new_h = int(img.width * scale_factor), int(img.height * scale_factor)
         img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-    # Preload adjacent frames for Hollywood Cross-Dissolve without MoviePy composition
+    # Preload adjacent frames for Cross Dissolve without MoviePy composition
     prev_frame = None
     next_frame = None
-    if prev_image_path and os.path.exists(prev_image_path) and start_transition == "Cross-Dissolve (Hollywood Blend)":
+    if prev_image_path and os.path.exists(prev_image_path) and start_transition == "Cross Dissolve":
         try:
             p_img = Image.open(prev_image_path).convert('RGB').resize((target_w, target_h), Image.Resampling.BILINEAR)
             prev_frame = np.array(p_img, dtype=np.float32)
         except Exception:
             pass
-    if next_image_path and os.path.exists(next_image_path) and end_transition == "Cross-Dissolve (Hollywood Blend)":
+    if next_image_path and os.path.exists(next_image_path) and end_transition == "Cross Dissolve":
         try:
             n_img = Image.open(next_image_path).convert('RGB').resize((target_w, target_h), Image.Resampling.BILINEAR)
             next_frame = np.array(n_img, dtype=np.float32)
@@ -102,7 +136,12 @@ def create_ken_burns_clip(
         z_rate = min(0.35, 0.035 * duration) # 3.5% zoom per second
         p_rate = min(0.80, 0.16 * duration)  # 16% pan per second
 
-        if effect_type == "zoom_in":
+        if effect_type == "none":
+            # Static image — no camera movement at all
+            scale = 1.0
+            pan_x = 0.0
+            pan_y = 0.0
+        elif effect_type == "zoom_in":
             scale = 1.0 + z_rate * p
             pan_x = 0.0
             pan_y = 0.0
@@ -150,6 +189,10 @@ def create_ken_burns_clip(
         elif effect_type == "zoom_out_slow_fast":
             p_ease = p ** 2  # Accelerating cinematic ease-in
             scale = (1.0 + z_rate) - z_rate * p_ease
+            pan_x = 0.0
+            pan_y = 0.0
+        elif effect_type in ["mirror_x", "mirror_y", "black_and_white", "invert_colors"]:
+            scale = 1.0 + z_rate * p
             pan_x = 0.0
             pan_y = 0.0
         else:
@@ -217,33 +260,36 @@ def create_ken_burns_clip(
             res = np.array(resized)
 
         # Bake flawless, zero-blackout transitions directly into RGB frame!
+        # Frame-level transitions: Cross Dissolve, Dip to White/Black/Gold/Cyan
+        # MoviePy clip-level transitions (Slide, CrossFade, Fade) are handled in video_generator.py
+        FRAME_LEVEL_TRANSITIONS = {"Cross Dissolve", "Dip to White", "Dip to Black", "Dip to Warm Gold", "Dip to Cool Cyan"}
         half_dur = transition_duration / 2.0
         if half_dur > 0 and duration > half_dur * 2:
             res_float = res.astype(np.float32)
-            if t < half_dur and start_transition != "Clean Cut (No Fade)":
+            if t < half_dur and start_transition in FRAME_LEVEL_TRANSITIONS:
                 alpha = max(0.0, min(1.0, t / half_dur))
-                if start_transition == "Cross-Dissolve (Hollywood Blend)" and prev_frame is not None:
+                if start_transition == "Cross Dissolve" and prev_frame is not None:
                     res_float = res_float * (0.5 + 0.5 * alpha) + prev_frame * (0.5 * (1.0 - alpha))
-                elif start_transition == "Flash / Dip to White":
+                elif start_transition == "Dip to White":
                     res_float = res_float * alpha + 255.0 * (1.0 - alpha)
                 elif start_transition == "Dip to Black":
                     res_float = res_float * alpha
-                elif start_transition == "Flash / Dip to Warm Gold":
+                elif start_transition == "Dip to Warm Gold":
                     res_float = res_float * alpha + np.array([255.0, 215.0, 100.0], dtype=np.float32) * (1.0 - alpha)
-                elif start_transition == "Flash / Dip to Cool Cyan":
+                elif start_transition == "Dip to Cool Cyan":
                     res_float = res_float * alpha + np.array([100.0, 200.0, 255.0], dtype=np.float32) * (1.0 - alpha)
                 res = np.clip(res_float, 0, 255).astype(np.uint8)
-            elif t > duration - half_dur and end_transition != "Clean Cut (No Fade)":
+            elif t > duration - half_dur and end_transition in FRAME_LEVEL_TRANSITIONS:
                 alpha = max(0.0, min(1.0, (duration - t) / half_dur))
-                if end_transition == "Cross-Dissolve (Hollywood Blend)" and next_frame is not None:
+                if end_transition == "Cross Dissolve" and next_frame is not None:
                     res_float = res_float * (0.5 + 0.5 * alpha) + next_frame * (0.5 * (1.0 - alpha))
-                elif end_transition == "Flash / Dip to White":
+                elif end_transition == "Dip to White":
                     res_float = res_float * alpha + 255.0 * (1.0 - alpha)
                 elif end_transition == "Dip to Black":
                     res_float = res_float * alpha
-                elif end_transition == "Flash / Dip to Warm Gold":
+                elif end_transition == "Dip to Warm Gold":
                     res_float = res_float * alpha + np.array([255.0, 215.0, 100.0], dtype=np.float32) * (1.0 - alpha)
-                elif end_transition == "Flash / Dip to Cool Cyan":
+                elif end_transition == "Dip to Cool Cyan":
                     res_float = res_float * alpha + np.array([100.0, 200.0, 255.0], dtype=np.float32) * (1.0 - alpha)
                 res = np.clip(res_float, 0, 255).astype(np.uint8)
 
@@ -251,6 +297,16 @@ def create_ken_burns_clip(
 
     clip = VideoClip(make_frame, duration=duration)
     
+    # Apply MoviePy out-of-the-box visual effects
+    if effect_type == "mirror_x":
+        clip = clip.with_effects([vfx.MirrorX()]) if MOVIEPY_V2 else clip.fx(vfx.mirror_x)  # type: ignore
+    elif effect_type == "mirror_y":
+        clip = clip.with_effects([vfx.MirrorY()]) if MOVIEPY_V2 else clip.fx(vfx.mirror_y)  # type: ignore
+    elif effect_type == "black_and_white":
+        clip = clip.with_effects([vfx.BlackAndWhite()]) if MOVIEPY_V2 else clip.fx(vfx.blackwhite)  # type: ignore
+    elif effect_type == "invert_colors":
+        clip = clip.with_effects([vfx.InvertColors()]) if MOVIEPY_V2 else clip.fx(vfx.invert_colors)  # type: ignore
+
     # In MoviePy v1 vs v2, set fps
     if hasattr(clip, "with_fps"):
         clip = clip.with_fps(fps)

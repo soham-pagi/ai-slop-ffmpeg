@@ -248,7 +248,7 @@ def create_custom_timeline(
             
         if len(row) == 3:
             # Check if column 0 is HTML preview or integer order
-            if isinstance(row[0], str) and "<img" in str(row[0]):
+            if isinstance(row[0], str) and "<img" in row[0]:
                 # [preview, filename, start_or_duration]
                 filename = str(row[1]).strip()
                 start_val = parse_time_str(row[2])

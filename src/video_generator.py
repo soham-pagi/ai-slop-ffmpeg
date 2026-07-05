@@ -2,9 +2,11 @@ import os
 import subprocess
 from typing import Union, List, Optional, Callable
 try:
-    from moviepy import concatenate_videoclips, AudioFileClip
+    from moviepy import concatenate_videoclips, AudioFileClip, CompositeVideoClip, vfx
+    MOVIEPY_V2 = True
 except ImportError:
-    from moviepy.editor import concatenate_videoclips, AudioFileClip # type: ignore
+    from moviepy.editor import concatenate_videoclips, AudioFileClip, CompositeVideoClip, vfx # type: ignore
+    MOVIEPY_V2 = False
 from .timestamp_parser import parse_script, parse_script_text
 from .image_mapper import map_images_to_timestamps, create_custom_timeline
 from .effects import create_ken_burns_clip
@@ -131,6 +133,78 @@ def get_optimal_video_settings() -> tuple:
     return "libx264", "ultrafast", threads
 
 
+def apply_moviepy_transitions(video_clips, cut_transitions, transition_duration):
+    """
+    Concatenates clips. If any MoviePy clip-level transitions (SlideIn, CrossFade, Fade)
+    are present, builds a CompositeVideoClip with exact timing and overlays.
+    Otherwise uses fast standard concatenation.
+    """
+    MOVIEPY_TRANSITIONS = {
+        "Slide In from Left", "Slide In from Right",
+        "Slide In from Top", "Slide In from Bottom",
+        "Cross Fade (MoviePy)", "Fade through Black (MoviePy)"
+    }
+    
+    # Check if we need MoviePy compositing
+    needs_compositing = any(t in MOVIEPY_TRANSITIONS for t in cut_transitions)
+    if not needs_compositing:
+        return concatenate_videoclips(video_clips)
+        
+    composited_clips = []
+    current_start = 0.0
+    
+    for i, clip in enumerate(video_clips):
+        # Set start time for clip i
+        if hasattr(clip, "with_start"):
+            positioned_clip = clip.with_start(current_start)
+        else:
+            positioned_clip = clip.set_start(current_start)
+            
+        if i > 0:
+            trans_name = cut_transitions[i - 1]
+            if trans_name in MOVIEPY_TRANSITIONS:
+                # Apply incoming MoviePy transition effect to clip i
+                effect_obj = None
+                if trans_name == "Slide In from Left":
+                    effect_obj = vfx.SlideIn(transition_duration, "left")
+                elif trans_name == "Slide In from Right":
+                    effect_obj = vfx.SlideIn(transition_duration, "right")
+                elif trans_name == "Slide In from Top":
+                    effect_obj = vfx.SlideIn(transition_duration, "top")
+                elif trans_name == "Slide In from Bottom":
+                    effect_obj = vfx.SlideIn(transition_duration, "bottom")
+                elif trans_name == "Cross Fade (MoviePy)":
+                    effect_obj = vfx.CrossFadeIn(transition_duration)
+                elif trans_name == "Fade through Black (MoviePy)":
+                    effect_obj = vfx.FadeIn(transition_duration)
+                    
+                if effect_obj is not None:
+                    if hasattr(positioned_clip, "with_effects"):
+                        positioned_clip = positioned_clip.with_effects([effect_obj])
+                    else:
+                        if trans_name.startswith("Slide In"):
+                            side = trans_name.split("from ")[-1].lower()
+                            positioned_clip = positioned_clip.fx(vfx.slide_in, transition_duration, side)  # type: ignore
+                        elif trans_name == "Cross Fade (MoviePy)":
+                            positioned_clip = positioned_clip.fx(vfx.crossfadein, transition_duration)  # type: ignore
+                        elif trans_name == "Fade through Black (MoviePy)":
+                            positioned_clip = positioned_clip.fx(vfx.fadein, transition_duration)  # type: ignore
+                
+                # Extend previous clip duration so it stays visible underneath during transition
+                if trans_name != "Fade through Black (MoviePy)":
+                    prev_clip = composited_clips[-1]
+                    new_dur = prev_clip.duration + transition_duration
+                    if hasattr(prev_clip, "with_duration"):
+                        composited_clips[-1] = prev_clip.with_duration(new_dur)
+                    else:
+                        composited_clips[-1] = prev_clip.set_duration(new_dur)
+                        
+        composited_clips.append(positioned_clip)
+        current_start += clip.duration
+        
+    return CompositeVideoClip(composited_clips)
+
+
 def generate_video(
     script_source: Optional[str] = None,
     audio_path: str = "",
@@ -198,20 +272,25 @@ def generate_video(
 
     print(f"[3/5] Creating dynamic Ken Burns video clips (Resolution: {resolution[0]}x{resolution[1]} @ {fps}fps, Strategy: {effect_strategy})...")
     all_effects = [
-        "zoom_in", "zoom_out", 
-        "pan_right_zoom_in", "pan_left_zoom_in",
-        "pan_up_zoom_in", "pan_down_zoom_in",
-        "pan_right_zoom_out", "pan_left_zoom_out",
-        "pan_up_right_zoom_in", "pan_down_left_zoom_in",
-        "zoom_in_fast_slow", "zoom_out_slow_fast"
+        "Slow Zoom In", "Slow Zoom Out", 
+        "Pan Right + Zoom In", "Pan Left + Zoom In",
+        "Pan Up + Zoom In", "Pan Down + Zoom In",
+        "Pan Right + Zoom Out", "Pan Left + Zoom Out",
+        "Diagonal Up-Right + Zoom", "Diagonal Down-Left + Zoom",
+        "Zoom In (Ease Out)", "Zoom Out (Ease In)",
+        "Mirror Horizontal (MoviePy)", "Mirror Vertical (MoviePy)",
+        "Black and White (MoviePy)", "Invert Colors (MoviePy)",
+        "Static / No Effect"
     ]
     
     if effect_strategy == "Zoom Only":
-        pool = ["zoom_in", "zoom_out", "zoom_in_fast_slow", "zoom_out_slow_fast"]
+        pool = ["Slow Zoom In", "Slow Zoom Out", "Zoom In (Ease Out)", "Zoom Out (Ease In)"]
     elif effect_strategy == "Pan Only":
-        pool = ["pan_right_zoom_in", "pan_left_zoom_in", "pan_up_zoom_in", "pan_down_zoom_in", "pan_right_zoom_out", "pan_left_zoom_out"]
+        pool = ["Pan Right + Zoom In", "Pan Left + Zoom In", "Pan Up + Zoom In", "Pan Down + Zoom In", "Pan Right + Zoom Out", "Pan Left + Zoom Out"]
     elif effect_strategy == "Dynamic Diagonals":
-        pool = ["pan_up_right_zoom_in", "pan_down_left_zoom_in", "pan_right_zoom_in", "pan_left_zoom_in", "zoom_in_fast_slow"]
+        pool = ["Diagonal Up-Right + Zoom", "Diagonal Down-Left + Zoom", "Pan Right + Zoom In", "Pan Left + Zoom In", "Zoom In (Ease Out)"]
+    elif effect_strategy == "Static / No Effect":
+        pool = ["Static / No Effect"]
     elif effect_strategy == "Cycle All (Ordered)":
         pool = all_effects
     else:  # "Random (No Consecutive Repeats)" or default
@@ -226,13 +305,19 @@ def generate_video(
     # A clip's per-row transition setting controls how it ENTERS (its incoming transition).
     # So clip j+1's transition setting -> cut_transitions[j].
     cut_transitions = []
-    all_styles = ["Cross-Dissolve (Hollywood Blend)", "Flash / Dip to White", "Dip to Black", "Flash / Dip to Warm Gold", "Flash / Dip to Cool Cyan"]
+    all_styles = [
+        "Cross Dissolve", "Dip to White", "Dip to Black", 
+        "Dip to Warm Gold", "Dip to Cool Cyan",
+        "Slide In from Left", "Slide In from Right",
+        "Slide In from Top", "Slide In from Bottom",
+        "Cross Fade (MoviePy)", "Fade through Black (MoviePy)"
+    ]
     for j in range(max(0, len(mapped_clips) - 1)):
         # The clip entering at this cut is mapped_clips[j+1]
         mc_trans = getattr(mapped_clips[j + 1], "transition", "Random / Global")
-        if mc_trans and mc_trans not in ["Random / Global", "Random", "Auto", "Global Strategy", ""]:
+        if mc_trans and mc_trans not in ["Random / Global", "Random", "Auto", "Global Strategy", "", "Random Cinematic"]:
             cut_transitions.append(mc_trans)
-        elif transition_style == "Random Cinematic":
+        elif transition_style in ["Random Cinematic", "Random", "Random / Global"]:
             cut_transitions.append(random.choice(all_styles))
         else:
             cut_transitions.append(transition_style)
@@ -253,8 +338,8 @@ def generate_video(
             effect = random.choice(available)
             last_effect = effect
 
-        start_trans = "Clean Cut (No Fade)" if i == 0 else cut_transitions[i - 1]
-        end_trans = "Clean Cut (No Fade)" if i == len(mapped_clips) - 1 else cut_transitions[i]
+        start_trans = "Hard Cut (No Fade)" if i == 0 else cut_transitions[i - 1]
+        end_trans = "Hard Cut (No Fade)" if i == len(mapped_clips) - 1 else cut_transitions[i]
         prev_path = mapped_clips[i - 1].image_path if i > 0 else None
         next_path = mapped_clips[i + 1].image_path if i < len(mapped_clips) - 1 else None
 
@@ -279,7 +364,7 @@ def generate_video(
         progress_callback(0.75, "Concatenating video clips and syncing audio...")
 
     print(f"[4/5] Concatenating clips and synchronizing audio (Style: {transition_style})...")
-    final_video = concatenate_videoclips(video_clips)
+    final_video = apply_moviepy_transitions(video_clips, cut_transitions, transition_duration)
 
     if not audio_clip and audio_path and os.path.exists(audio_path):
         try:

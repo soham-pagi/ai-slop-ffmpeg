@@ -171,8 +171,56 @@ def build_timeline_html(rows):
         eff_val = r.get("effect", "Random / Global") or "Random / Global"
         trans_val = r.get("transition", "Random / Global") or "Random / Global"
 
-        eff_options = ["Random / Global", "zoom_in", "zoom_out", "pan_right_zoom_in", "pan_left_zoom_in", "pan_up_zoom_in", "pan_down_zoom_in", "pan_right_zoom_out", "pan_left_zoom_out", "pan_up_right_zoom_in", "pan_down_left_zoom_in", "zoom_in_fast_slow", "zoom_out_slow_fast"]
-        trans_options = ["Random / Global", "Cross-Dissolve (Hollywood Blend)", "Flash / Dip to White", "Dip to Black", "Flash / Dip to Warm Gold", "Flash / Dip to Cool Cyan", "Clean Cut (No Fade)"]
+        EFF_UI_MAP = {
+            "zoom_in": "Slow Zoom In",
+            "zoom_out": "Slow Zoom Out",
+            "pan_right_zoom_in": "Pan Right + Zoom In",
+            "pan_left_zoom_in": "Pan Left + Zoom In",
+            "pan_up_zoom_in": "Pan Up + Zoom In",
+            "pan_down_zoom_in": "Pan Down + Zoom In",
+            "pan_right_zoom_out": "Pan Right + Zoom Out",
+            "pan_left_zoom_out": "Pan Left + Zoom Out",
+            "pan_up_right_zoom_in": "Diagonal Up-Right + Zoom",
+            "pan_down_left_zoom_in": "Diagonal Down-Left + Zoom",
+            "zoom_in_fast_slow": "Zoom In (Ease Out)",
+            "zoom_out_slow_fast": "Zoom Out (Ease In)",
+            "mirror_x": "Mirror Horizontal (MoviePy)",
+            "mirror_y": "Mirror Vertical (MoviePy)",
+            "black_and_white": "Black and White (MoviePy)",
+            "invert_colors": "Invert Colors (MoviePy)",
+            "none": "Static / No Effect",
+            "No Effect": "Static / No Effect"
+        }
+        TRANS_UI_MAP = {
+            "Cross-Dissolve (Hollywood Blend)": "Cross Dissolve",
+            "Flash / Dip to White": "Dip to White",
+            "Dip to Black": "Dip to Black",
+            "Flash / Dip to Warm Gold": "Dip to Warm Gold",
+            "Flash / Dip to Cool Cyan": "Dip to Cool Cyan",
+            "Clean Cut (No Fade)": "Hard Cut (No Fade)",
+            "No Transition": "Hard Cut (No Fade)",
+            "Random Cinematic": "Random / Global"
+        }
+        eff_val = EFF_UI_MAP.get(eff_val, eff_val)
+        trans_val = TRANS_UI_MAP.get(trans_val, trans_val)
+
+        eff_options = [
+            "Random / Global", "Slow Zoom In", "Slow Zoom Out", 
+            "Pan Right + Zoom In", "Pan Left + Zoom In", "Pan Up + Zoom In", "Pan Down + Zoom In",
+            "Pan Right + Zoom Out", "Pan Left + Zoom Out",
+            "Diagonal Up-Right + Zoom", "Diagonal Down-Left + Zoom",
+            "Zoom In (Ease Out)", "Zoom Out (Ease In)",
+            "Mirror Horizontal (MoviePy)", "Mirror Vertical (MoviePy)",
+            "Black and White (MoviePy)", "Invert Colors (MoviePy)",
+            "Static / No Effect"
+        ]
+        trans_options = [
+            "Random / Global", "Cross Dissolve", "Dip to White", "Dip to Black", 
+            "Dip to Warm Gold", "Dip to Cool Cyan",
+            "Slide In from Left", "Slide In from Right", "Slide In from Top", "Slide In from Bottom",
+            "Cross Fade (MoviePy)", "Fade through Black (MoviePy)",
+            "Hard Cut (No Fade)"
+        ]
 
         eff_html = "".join([f'<option value="{opt}"{" selected" if opt == eff_val else ""}>{opt}</option>' for opt in eff_options])
         trans_html = "".join([f'<option value="{opt}"{" selected" if opt == trans_val else ""}>{opt}</option>' for opt in trans_options])
@@ -858,12 +906,18 @@ with gr.Blocks(**blocks_kwargs) as demo:
                     )
                 with gr.Row():
                     transition_style_dropdown = gr.Dropdown(
-                        choices=["Random Cinematic", "Cross-Dissolve (Hollywood Blend)", "Flash / Dip to White", "Dip to Black", "Flash / Dip to Warm Gold", "Flash / Dip to Cool Cyan", "Clean Cut (No Fade)"],
-                        value="Random Cinematic",
+                        choices=[
+                            "Random", "Cross Dissolve", "Dip to White", "Dip to Black", 
+                            "Dip to Warm Gold", "Dip to Cool Cyan",
+                            "Slide In from Left", "Slide In from Right", "Slide In from Top", "Slide In from Bottom",
+                            "Cross Fade (MoviePy)", "Fade through Black (MoviePy)",
+                            "Hard Cut (No Fade)"
+                        ],
+                        value="Random",
                         label="Transition Style"
                     )
                     effect_strategy_dropdown = gr.Dropdown(
-                        choices=["Random (No Consecutive Repeats)", "Cycle All (Ordered)", "Zoom Only", "Pan Only", "Dynamic Diagonals"],
+                        choices=["Random (No Consecutive Repeats)", "Cycle All (Ordered)", "Zoom Only", "Pan Only", "Dynamic Diagonals", "Static / No Effect"],
                         value="Random (No Consecutive Repeats)",
                         label="Effect Strategy"
                     )
