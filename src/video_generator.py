@@ -34,14 +34,14 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
         else:
             effect = random.choice(['zoom_in', 'zoom_out', 'pan_right', 'pan_left'])
         
-        if effect == 'zoom_in': zp = f"z='min(zoom+0.0010,1.5)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-        elif effect == 'zoom_out': zp = f"z='if(eq(on,1),1.5,max(zoom-0.0010,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-        elif effect == 'pan_right': zp = f"z='1.2':x='if(eq(on,1),0,min(x+3,iw-iw/zoom))':y='ih/2-(ih/zoom/2)'"
-        else: zp = f"z='1.2':x='if(eq(on,1),iw-iw/zoom,max(x-3,0))':y='ih/2-(ih/zoom/2)'"
+        if effect == 'zoom_in': zp = f"z='min(1.0+0.0010*on,1.5)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+        elif effect == 'zoom_out': zp = f"z='max(1.5-0.0010*on,1.0)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+        elif effect == 'pan_right': zp = f"z='1.2':x='min(on*3,iw-iw/zoom)':y='ih/2-(ih/zoom/2)'"
+        else: zp = f"z='1.2':x='max(iw-iw/zoom-on*3,0)':y='ih/2-(ih/zoom/2)'"
         
         in_label, out_label = f"[{i}:v]", f"[v{i}]"
-        # Scale to 5K (5120w) sweet spot: completely eliminates zoompan jitter while boosting GPU rendering speed back to 40+ FPS
-        filter_parts.append(f"{in_label}scale=5120:-1,zoompan={zp}:d={frames}:s={w}x{h}:fps={fps},format=yuva420p{out_label}")
+        # Scale to 8K (8000w) and use non-recursive deterministic frame math (on*3) to completely eliminate zoompan jitter
+        filter_parts.append(f"{in_label}scale=8000:-1,zoompan={zp}:d={frames}:s={w}x{h}:fps={fps},format=yuva420p{out_label}")
         
         if i == 0:
             prev_label = out_label
