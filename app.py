@@ -736,6 +736,9 @@ except Exception:
 blocks_kwargs: dict[str, Any] = {
     "title": "AI Video Maker",
 }
+if not GRADIO_V6:
+    blocks_kwargs["theme"] = gr.themes.Default()  # type: ignore
+    blocks_kwargs["css"] = EDITOR_CSS
 
 with gr.Blocks(**blocks_kwargs) as demo:
 
@@ -1013,8 +1016,9 @@ if __name__ == "__main__":
     launch_kwargs: dict[str, Any] = {
         "share": args.share,
         "server_port": args.port,
-        "theme": gr.themes.Default(),
-        "css": EDITOR_CSS
     }
+    if GRADIO_V6:
+        launch_kwargs["theme"] = gr.themes.Default()  # type: ignore
+        launch_kwargs["css"] = EDITOR_CSS
 
     demo.launch(**launch_kwargs)
