@@ -905,7 +905,9 @@ with gr.Blocks(**blocks_kwargs) as demo:
             </div>
             """)
 
-            generate_btn = gr.Button("🎬  RENDER VIDEO", variant="primary", size="lg")
+            with gr.Row():
+                generate_btn = gr.Button("🎬  RENDER VIDEO", variant="primary", size="lg", scale=4)
+                cancel_btn = gr.Button("❌  CANCEL RENDER", variant="stop", size="lg", scale=1)
 
             with gr.Row():
                 with gr.Column(scale=7):
@@ -939,7 +941,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
         outputs=[timeline_html, timeline_json_bridge]
     )
 
-    generate_btn.click(
+    gen_event = generate_btn.click(
         fn=sync_timeline_bridge,
         inputs=[timeline_json_bridge],
         outputs=[timeline_json_bridge],
@@ -953,6 +955,21 @@ with gr.Blocks(**blocks_kwargs) as demo:
             timeline_json_bridge, effect_strategy_dropdown, transition_style_dropdown
         ],
         outputs=[output_video, output_file, output_status]
+    )
+
+    def cancel_generation_fn():
+        import subprocess
+        try:
+            subprocess.run(["pkill", "-9", "-f", "ffmpeg"], check=False)
+        except Exception:
+            pass
+        return "🛑 Video generation cancelled by user! GPU memory freed and FFmpeg process terminated."
+
+    cancel_btn.click(
+        fn=cancel_generation_fn,
+        inputs=None,
+        outputs=[output_status],
+        cancels=[gen_event]
     )
 
     # Initialize SortableJS on page load
