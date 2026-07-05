@@ -72,8 +72,8 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
     if len(timeline_data) == 1: filter_parts.append(f"[v0]format=yuv420p[outv]")
         
     audio_idx = len(timeline_data)
-    cmd = ["ffmpeg", "-y"] + inputs + ["-filter_complex", ";".join(filter_parts), "-map", "[outv]"]
-    if has_audio: cmd.extend(["-map", f"{audio_idx}:a", "-c:a", "aac", "-b:a", "320k"])
+    cmd_base = ["ffmpeg", "-y"] + inputs + ["-filter_complex", ";".join(filter_parts), "-map", "[outv]"]
+    if has_audio: cmd_base.extend(["-map", f"{audio_idx}:a", "-c:a", "aac", "-b:a", "320k"])
     
     # Check if NVIDIA GPU hardware encoding is available
     use_nvenc = False
@@ -84,15 +84,23 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
     except Exception:
         pass
 
+    common_flags = ["-profile:v", "high", "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-movflags", "+faststart", "-shortest", output_path]
+
     if use_nvenc:
-        print("  [GPU Accelerated] Using NVIDIA h264_nvenc Hardware Encoder...")
-        cmd.extend(["-c:v", "h264_nvenc", "-preset", "p6", "-cq", "16", "-rc", "vbr", "-profile:v", "high", "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-movflags", "+faststart", "-shortest", output_path])
-    else:
-        print("  [CPU Fallback] Using libx264 Software Encoder...")
-        cmd.extend(["-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-profile:v", "high", "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-movflags", "+faststart", "-shortest", output_path])
-    
-    print("Executing Native FFmpeg C++ Engine...")
-    subprocess.run(cmd, check=True)
+        print("  [GPU Accelerated] Attempting NVIDIA h264_nvenc Hardware Encoder...")
+        # Use universally supported NVENC presets ('hq'/'slow') instead of SDK-restricted 'p6'
+        cmd_nvenc = cmd_base + ["-c:v", "h264_nvenc", "-preset", "hq", "-cq", "16"] + common_flags
+        try:
+            print("Executing Native FFmpeg C++ Engine (GPU NVENC)...")
+            subprocess.run(cmd_nvenc, check=True)
+            return output_path
+        except subprocess.CalledProcessError as e:
+            print(f"  [NVENC Warning] GPU hardware encoding failed (exit code {e.returncode}). Automatically falling back to fast CPU software encoding...")
+
+    print("  [CPU Fallback] Using libx264 Software Encoder (-crf 16 -preset veryfast)...")
+    cmd_cpu = cmd_base + ["-c:v", "libx264", "-preset", "veryfast", "-crf", "16"] + common_flags
+    print("Executing Native FFmpeg C++ Engine (CPU x264)...")
+    subprocess.run(cmd_cpu, check=True)
     return output_path
 
 def run_gradio_generation(script_mode, script_file, script_text, audio_file,
