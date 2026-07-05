@@ -72,7 +72,8 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
     if len(timeline_data) == 1: filter_parts.append(f"[v0]format=yuv420p[outv]")
         
     audio_idx = len(timeline_data)
-    cmd_base = ["ffmpeg", "-y"] + inputs + ["-filter_complex", ";".join(filter_parts), "-map", "[outv]"]
+    # Add -hide_banner and -nostdin for clean cloud container execution without ALSA/stdin locking
+    cmd_base = ["ffmpeg", "-y", "-hide_banner", "-nostdin"] + inputs + ["-filter_complex", ";".join(filter_parts), "-map", "[outv]"]
     if has_audio: cmd_base.extend(["-map", f"{audio_idx}:a", "-c:a", "aac", "-b:a", "320k"])
     
     # Check if NVIDIA GPU hardware encoding is available
@@ -95,10 +96,10 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
             subprocess.run(cmd_nvenc, check=True)
             return output_path
         except subprocess.CalledProcessError as e:
-            print(f"  [NVENC Warning] GPU hardware encoding failed (exit code {e.returncode}). Automatically falling back to fast CPU software encoding...")
+            print(f"  [NVENC Warning] GPU hardware encoding failed (driver mismatch/exit code {e.returncode}). Automatically falling back to fast CPU software encoding...")
 
-    print("  [CPU Fallback] Using libx264 Software Encoder (-crf 16 -preset veryfast)...")
-    cmd_cpu = cmd_base + ["-c:v", "libx264", "-preset", "veryfast", "-crf", "16"] + common_flags
+    print("  [CPU Fallback] Using libx264 Software Encoder (-crf 16 -preset veryfast -threads 0)...")
+    cmd_cpu = cmd_base + ["-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-threads", "0"] + common_flags
     print("Executing Native FFmpeg C++ Engine (CPU x264)...")
     subprocess.run(cmd_cpu, check=True)
     return output_path
