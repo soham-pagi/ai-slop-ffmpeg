@@ -40,8 +40,8 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
         else: zp = f"z='1.2':x='if(eq(on,1),iw-iw/zoom,max(x-1.4,0))':y='ih/2-(ih/zoom/2)'"
         
         in_label, out_label = f"[{i}:v]", f"[v{i}]"
-        # Scale to 4K internally for crisp zooming without 8K memory overload
-        filter_parts.append(f"{in_label}scale=3840:-1,zoompan={zp}:d={frames}:s={w}x{h}:fps={fps},format=yuva420p{out_label}")
+        # Scale to 2.5K (2560w) internally for crisp 1.5x zooming at 2x-3x faster CPU rendering speed
+        filter_parts.append(f"{in_label}scale=2560:-1,zoompan={zp}:d={frames}:s={w}x{h}:fps={fps},format=yuva420p{out_label}")
         
         if i == 0:
             prev_label = out_label
