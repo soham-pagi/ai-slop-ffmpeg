@@ -301,10 +301,21 @@ def build_timeline_html(rows):
       .tl-row {{
         cursor: grab;
         border-bottom: 1px solid #1a1a30;
-        transition: background 0.15s ease;
       }}
       .tl-row:hover {{
         background: #1c1c3a !important;
+      }}
+      .sortable-ghost {{
+        opacity: 0.3 !important;
+        background: #2a1a4a !important;
+      }}
+      .sortable-chosen {{
+        background: #222244 !important;
+      }}
+      .sortable-drag {{
+        opacity: 0.9 !important;
+        background: #3a2a6a !important;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.5);
       }}
       .tl-cell {{
         padding: 6px 8px;
@@ -424,10 +435,18 @@ async () => {
         if (!tbody) { setTimeout(initSortable, 500); return; }
         if (tbody._sortableInstance) tbody._sortableInstance.destroy();
         tbody._sortableInstance = new Sortable(tbody, {
-            animation: 200,
+            animation: 150,
             handle: '.tl-handle',
             ghostClass: 'sortable-ghost',
             chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            scroll: true,
+            scrollSensitivity: 100,
+            scrollSpeed: 20,
+            bubbleScroll: true,
+            invertSwap: true,
+            swapThreshold: 0.65,
+            direction: 'vertical',
             onEnd: function() { recalcAndSync(); }
         });
     }
@@ -588,8 +607,8 @@ READ_TIMELINE_JS = """
 #  Backend Functions
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def populate_timeline(script_mode, script_file, script_text, audio_file, image_mode, images_folder, uploaded_images, mapping_mode):
-    """Populate the timeline from uploaded images. Returns (html, json_data)."""
+def populate_timeline(script_mode, script_file, script_text, audio_file, image_mode, images_folder, uploaded_images, mapping_mode, existing_json="[]"):
+    """Populate the timeline from uploaded images while preserving existing user edits and reordered sequence. Returns (html, json_data)."""
     try:
         from src.image_mapper import map_images_to_timestamps
         from src.timestamp_parser import parse_script, parse_script_text
@@ -597,6 +616,19 @@ def populate_timeline(script_mode, script_file, script_text, audio_file, image_m
             from moviepy import AudioFileClip
         except ImportError:
             from moviepy.editor import AudioFileClip  # type: ignore
+
+        existing_map = {}
+        existing_order = []
+        try:
+            if existing_json and isinstance(existing_json, str):
+                items = json.loads(existing_json)
+                for it in items:
+                    p = os.path.normpath(it.get("path", ""))
+                    if p and p not in existing_map:
+                        existing_map[p] = it
+                        existing_order.append(p)
+        except Exception:
+            pass
 
         images_source = ""
         if image_mode == "Select Local Folder" and images_folder and os.path.exists(images_folder):
@@ -622,18 +654,50 @@ def populate_timeline(script_mode, script_file, script_text, audio_file, image_m
             _, timestamps = parse_script_text(script_text)
 
         mapped = map_images_to_timestamps(images_source, timestamps=timestamps, mode=mapping_mode, audio_duration=audio_dur)
+        mapped_dict = {os.path.normpath(mc.image_path): mc for mc in mapped}
 
         rows = []
+        added_paths = set()
+
+        # 1. Preserve existing items in their exact saved reordered sequence
+        for p in existing_order:
+            if p in mapped_dict:
+                mc = mapped_dict[p]
+                old_item = existing_map[p]
+                rows.append({
+                    "thumb_b64": get_image_thumbnail_b64(mc.image_path),
+                    "filename": os.path.basename(mc.image_path),
+                    "path": mc.image_path,
+                    "start": str(old_item.get("start", round(mc.start_time, 2))),
+                    "duration": str(old_item.get("duration", round(mc.duration, 2))),
+                    "effect": old_item.get("effect", getattr(mc, "effect", "Random / Global") or "Random / Global"),
+                    "transition": old_item.get("transition", getattr(mc, "transition", "Random / Global") or "Random / Global")
+                })
+                added_paths.add(p)
+
+        # 2. Append any brand new images that were added to the folder/upload later
         for mc in mapped:
-            rows.append({
-                "thumb_b64": get_image_thumbnail_b64(mc.image_path),
-                "filename": os.path.basename(mc.image_path),
-                "path": mc.image_path,
-                "start": str(round(mc.start_time, 2)),
-                "duration": str(round(mc.duration, 2)),
-                "effect": getattr(mc, "effect", "Random / Global") or "Random / Global",
-                "transition": getattr(mc, "transition", "Random / Global") or "Random / Global"
-            })
+            p = os.path.normpath(mc.image_path)
+            if p not in added_paths:
+                rows.append({
+                    "thumb_b64": get_image_thumbnail_b64(mc.image_path),
+                    "filename": os.path.basename(mc.image_path),
+                    "path": mc.image_path,
+                    "start": str(round(mc.start_time, 2)),
+                    "duration": str(round(mc.duration, 2)),
+                    "effect": getattr(mc, "effect", "Random / Global") or "Random / Global",
+                    "transition": getattr(mc, "transition", "Random / Global") or "Random / Global"
+                })
+                added_paths.add(p)
+
+        # 3. Cleanly recalculate ascending start times based on durations
+        curr_t = 0.0
+        for r in rows:
+            r["start"] = str(round(curr_t, 2))
+            try:
+                curr_t += float(r.get("duration", 5.0))
+            except ValueError:
+                curr_t += 5.0
 
         html = build_timeline_html(rows)
         json_data = json.dumps([{"path": r["path"], "filename": r["filename"], "start": r["start"], "duration": r["duration"], "effect": r.get("effect", "Random / Global"), "transition": r.get("transition", "Random / Global")} for r in rows])
@@ -927,8 +991,13 @@ with gr.Blocks(**blocks_kwargs) as demo:
     # ─── Wire up event handlers ───
 
     populate_btn.click(
+        fn=sync_timeline_bridge,
+        inputs=[timeline_json_bridge],
+        outputs=[timeline_json_bridge],
+        js=READ_TIMELINE_JS
+    ).then(
         fn=populate_timeline,
-        inputs=[script_mode, script_file, script_text, audio_file, image_mode, images_folder, uploaded_images, mapping_radio],
+        inputs=[script_mode, script_file, script_text, audio_file, image_mode, images_folder, uploaded_images, mapping_radio, timeline_json_bridge],
         outputs=[timeline_html, timeline_json_bridge]
     )
 
