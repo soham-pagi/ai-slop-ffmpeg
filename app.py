@@ -4,6 +4,9 @@ import argparse
 import base64
 import io
 import gradio as gr
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="gradio")
+warnings.filterwarnings("ignore", message=".*show_api.*")
 from typing import Any
 from PIL import Image
 from src.video_generator import generate_video, run_gradio_generation
@@ -732,10 +735,7 @@ except Exception:
 
 blocks_kwargs: dict[str, Any] = {
     "title": "AI Video Maker",
-    "css": EDITOR_CSS,
 }
-if not GRADIO_V6:
-    blocks_kwargs["theme"] = gr.themes.Default()  # type: ignore
 
 with gr.Blocks(**blocks_kwargs) as demo:
 
@@ -1010,8 +1010,11 @@ if __name__ == "__main__":
     print("="*60 + "\n")
 
     print(f"\nLaunching AI Video Maker (Share={args.share}, Port={args.port}, Gradio v{gr.__version__})...")
-    launch_kwargs: dict[str, Any] = {"share": args.share, "server_port": args.port}
-    if GRADIO_V6:
-        launch_kwargs["theme"] = gr.themes.Default()  # type: ignore
+    launch_kwargs: dict[str, Any] = {
+        "share": args.share,
+        "server_port": args.port,
+        "theme": gr.themes.Default(),
+        "css": EDITOR_CSS
+    }
 
     demo.launch(**launch_kwargs)
