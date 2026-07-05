@@ -88,8 +88,8 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
 
     if use_nvenc:
         print("  [GPU Accelerated] Attempting NVIDIA h264_nvenc Hardware Encoder...")
-        # Use universally supported NVENC presets ('hq'/'slow') instead of SDK-restricted 'p6'
-        cmd_nvenc = cmd_base + ["-c:v", "h264_nvenc", "-preset", "hq", "-cq", "16"] + common_flags
+        # Use modern standard preset 'slow' and -b:v 0 to enable constant quality CQ 16 without EINVAL
+        cmd_nvenc = cmd_base + ["-c:v", "h264_nvenc", "-preset", "slow", "-cq", "16", "-b:v", "0"] + common_flags
         try:
             print("Executing Native FFmpeg C++ Engine (GPU NVENC)...")
             subprocess.run(cmd_nvenc, check=True)
