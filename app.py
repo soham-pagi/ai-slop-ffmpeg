@@ -1025,6 +1025,9 @@ with gr.Blocks(**blocks_kwargs) as demo:
     )
 
     generate_btn.click(
+        fn=None,
+        js=READ_TIMELINE_JS
+    ).then(
         fn=run_gradio_generation,
         inputs=[
             script_mode, script_file, script_text, audio_file,
@@ -1032,8 +1035,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
             res_dropdown, fps_dropdown, transition_slider, mapping_radio,
             timeline_json_bridge, effect_strategy_dropdown, transition_style_dropdown
         ],
-        outputs=[output_video, output_status],
-        js=READ_TIMELINE_JS
+        outputs=[output_video, output_status]
     )
 
     # Initialize SortableJS on page load
