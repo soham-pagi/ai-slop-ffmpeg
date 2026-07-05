@@ -40,10 +40,9 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
         else: zp = f"z='1.2':x='max(iw-iw/zoom-on*1.5,0)':y='ih/2-(ih/zoom/2)'"
         
         in_label, out_label = f"[{i}:v]", f"[v{i}]"
-        # Deep verified jitter fix: scale & crop to exact 8000x(8000*h/w) aspect ratio before zoompan to eliminate aspect mismatch and integer rounding vibration
-        canvas_w = 8000
-        canvas_h = int(8000 * h / w)
-        if canvas_h % 2 != 0: canvas_h += 1
+        # True 8K UHD base (7680x4320 for 16:9) aligned to 16/32-byte SIMD vector boundaries to eliminate swscaler data alignment warnings & boost speed
+        canvas_w = 7680
+        canvas_h = int(round((7680 * h / w) / 16.0) * 16)
         filter_parts.append(f"{in_label}scale=w={canvas_w}:h={canvas_h}:force_original_aspect_ratio=increase:flags=lanczos,crop={canvas_w}:{canvas_h},zoompan={zp}:d={frames}:s={w}x{h}:fps={fps},format=yuva420p{out_label}")
         
         if i == 0:
