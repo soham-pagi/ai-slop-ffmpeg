@@ -10,9 +10,8 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
     prev_label = ""
     
     for i, item in enumerate(timeline_data):
-        dur = float(item.get('duration', 5.0))
         img = item.get('path')
-        inputs.extend(["-loop", "1", "-t", str(dur), "-i", img])
+        inputs.extend(["-i", img])
     
     has_audio = audio_path and os.path.exists(audio_path)
     if has_audio: inputs.extend(["-i", audio_path])
@@ -29,8 +28,8 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
         else: zp = f"z='1.2':x='if(eq(on,1),iw-iw/zoom,max(x-2,0))':y='ih/2-(ih/zoom/2)'"
         
         in_label, out_label = f"[{i}:v]", f"[v{i}]"
-        # Scale to 8K internally for crisp zooming, then output target res
-        filter_parts.append(f"{in_label}scale=8000:-1,zoompan={zp}:d={frames}:s={w}x{h}:fps={fps},format=yuva420p{out_label}")
+        # Scale to 4K internally for crisp zooming without 8K memory overload
+        filter_parts.append(f"{in_label}scale=3840:-1,zoompan={zp}:d={frames}:s={w}x{h}:fps={fps},format=yuva420p{out_label}")
         
         if i == 0:
             prev_label = out_label
