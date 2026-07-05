@@ -34,14 +34,14 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
         else:
             effect = random.choice(['zoom_in', 'zoom_out', 'pan_right', 'pan_left'])
         
-        if effect == 'zoom_in': zp = f"z='min(zoom+0.00105,1.5)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-        elif effect == 'zoom_out': zp = f"z='if(eq(on,1),1.5,max(zoom-0.00105,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-        elif effect == 'pan_right': zp = f"z='1.2':x='if(eq(on,1),0,min(x+1.4,iw-iw/zoom))':y='ih/2-(ih/zoom/2)'"
-        else: zp = f"z='1.2':x='if(eq(on,1),iw-iw/zoom,max(x-1.4,0))':y='ih/2-(ih/zoom/2)'"
+        if effect == 'zoom_in': zp = f"z='min(zoom+0.0010,1.5)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+        elif effect == 'zoom_out': zp = f"z='if(eq(on,1),1.5,max(zoom-0.0010,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+        elif effect == 'pan_right': zp = f"z='1.2':x='if(eq(on,1),0,min(x+2,iw-iw/zoom))':y='ih/2-(ih/zoom/2)'"
+        else: zp = f"z='1.2':x='if(eq(on,1),iw-iw/zoom,max(x-2,0))':y='ih/2-(ih/zoom/2)'"
         
         in_label, out_label = f"[{i}:v]", f"[v{i}]"
-        # Scale to 2.5K (2560w) internally for crisp 1.5x zooming at 2x-3x faster CPU rendering speed
-        filter_parts.append(f"{in_label}scale=2560:-1,zoompan={zp}:d={frames}:s={w}x{h}:fps={fps},format=yuva420p{out_label}")
+        # Scale to 4K (4000w) and use exact integer steps to eliminate FFmpeg zoompan integer rounding vibration and jitter
+        filter_parts.append(f"{in_label}scale=4000:-1,zoompan={zp}:d={frames}:s={w}x{h}:fps={fps},format=yuva420p{out_label}")
         
         if i == 0:
             prev_label = out_label
