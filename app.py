@@ -550,6 +550,31 @@ async () => {
 """
 
 
+READ_TIMELINE_JS = """
+() => {
+    const tbody = document.getElementById('timeline-tbody');
+    if (!tbody) return;
+    const data = [];
+    tbody.querySelectorAll('tr').forEach((tr) => {
+        data.push({
+            path: tr.getAttribute('data-path') || '',
+            filename: tr.getAttribute('data-filename') || '',
+            start: tr.querySelector('input[data-field="start"]')?.value || '0.0',
+            duration: tr.querySelector('input[data-field="duration"]')?.value || '5.0',
+            effect: tr.querySelector('select[data-field="effect"]')?.value || 'Random',
+            transition: tr.querySelector('select[data-field="transition"]')?.value || 'Random'
+        });
+    });
+    const el = document.querySelector('#timeline-json-bridge textarea, #timeline-json-bridge input');
+    if (!el) return;
+    const proto = el.tagName.toLowerCase() === 'textarea' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+    const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+    nativeSetter.call(el, JSON.stringify(data));
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+"""
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 #  Backend Functions
@@ -1006,7 +1031,8 @@ with gr.Blocks(**blocks_kwargs) as demo:
             res_dropdown, fps_dropdown, transition_slider, mapping_radio,
             timeline_json_bridge, effect_strategy_dropdown, transition_style_dropdown
         ],
-        outputs=[output_video, output_status]
+        outputs=[output_video, output_status],
+        js=READ_TIMELINE_JS
     )
 
     # Initialize SortableJS on page load

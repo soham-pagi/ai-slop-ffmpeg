@@ -179,41 +179,31 @@ def parse_time_str(val: Any) -> Optional[float]:
 
 
 def find_matching_image(filename: str, image_paths: List[str], path_map: dict) -> str:
-    if not filename:
-        return image_paths[0]
+    if not filename: return image_paths[0]
     fname_clean = filename.strip()
 
-    # 0. If it's already a full path that exists, use it directly
     if os.path.isabs(fname_clean) and os.path.exists(fname_clean):
         return fname_clean
     
-    # 1. Exact match (case-sensitive)
-    if fname_clean in path_map:
-        return path_map[fname_clean]
+    basename = os.path.basename(fname_clean)
+    if basename in path_map: return path_map[basename]
         
-    # 2. Case-insensitive exact match
     for base, full in path_map.items():
-        if base.lower() == fname_clean.lower():
-            return full
+        if base.lower() == basename.lower(): return full
             
-    # 3. Substring match (e.g. user typed "dog" for "my_dog_photo.png" or "1.png" for "prefix_1.png")
     for base, full in path_map.items():
-        if fname_clean.lower() in base.lower():
-            return full
+        if basename.lower() in base.lower(): return full
             
-    # 4. Numeric / Index match (e.g. user typed "1", "2", "3" or "#1", "image 1")
-    import re
-    nums = re.findall(r'\d+', fname_clean)
-    if nums:
-        try:
-            idx = int(nums[0]) - 1 # 1-based to 0-based
-            if 0 <= idx < len(image_paths):
-                return image_paths[idx]
-        except Exception:
-            pass
+    # Fallback: ONLY extract numbers if it's a simple filename, NOT a full path
+    if not os.path.isabs(fname_clean) and '/' not in fname_clean and '\\' not in fname_clean:
+        import re
+        nums = re.findall(r'\d+', fname_clean)
+        if nums:
+            try:
+                idx = int(nums[0]) - 1 
+                if 0 <= idx < len(image_paths): return image_paths[idx]
+            except Exception: pass
             
-    # 5. Fallback to first image
-    print(f"[Warning] Could not find exact match for image '{filename}'. Defaulting to first image: {os.path.basename(image_paths[0])}")
     return image_paths[0]
 
 
