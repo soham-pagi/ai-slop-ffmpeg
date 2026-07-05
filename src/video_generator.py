@@ -74,7 +74,22 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
     audio_idx = len(timeline_data)
     cmd = ["ffmpeg", "-y"] + inputs + ["-filter_complex", ";".join(filter_parts), "-map", "[outv]"]
     if has_audio: cmd.extend(["-map", f"{audio_idx}:a", "-c:a", "aac", "-b:a", "320k"])
-    cmd.extend(["-c:v", "libx264", "-preset", "medium", "-crf", "16", "-profile:v", "high", "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-movflags", "+faststart", "-shortest", output_path])
+    
+    # Check if NVIDIA GPU hardware encoding is available
+    use_nvenc = False
+    try:
+        res = subprocess.run(["ffmpeg", "-encoders"], capture_output=True, text=True)
+        if "h264_nvenc" in res.stdout:
+            use_nvenc = True
+    except Exception:
+        pass
+
+    if use_nvenc:
+        print("  [GPU Accelerated] Using NVIDIA h264_nvenc Hardware Encoder...")
+        cmd.extend(["-c:v", "h264_nvenc", "-preset", "p6", "-cq", "16", "-rc", "vbr", "-profile:v", "high", "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-movflags", "+faststart", "-shortest", output_path])
+    else:
+        print("  [CPU Fallback] Using libx264 Software Encoder...")
+        cmd.extend(["-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-profile:v", "high", "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-movflags", "+faststart", "-shortest", output_path])
     
     print("Executing Native FFmpeg C++ Engine...")
     subprocess.run(cmd, check=True)
