@@ -225,7 +225,7 @@ def create_ken_burns_clip(
                     [0.0, 1.0 / scale, ty]
                 ]], dtype=torch.float32, device=img_gpu.device)
                 grid = F.affine_grid(theta, size=(1, 3, target_h, target_w), align_corners=False)
-                res_gpu = F.grid_sample(img_gpu, grid, mode='bilinear', padding_mode='reflection', align_corners=False)
+                res_gpu = F.grid_sample(img_gpu, grid, mode='bicubic', padding_mode='reflection', align_corners=False)
                 res_clamped = torch.clamp(res_gpu.squeeze(0).permute(1, 2, 0) * 255.0, 0, 255).to(torch.uint8)
                 res = res_clamped.cpu().numpy()
             except Exception:
@@ -243,7 +243,7 @@ def create_ken_burns_clip(
                     img_np,
                     M,
                     (target_w, target_h),
-                    flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP,
+                    flags=cv2.INTER_CUBIC | cv2.WARP_INVERSE_MAP,
                     borderMode=cv2.BORDER_REFLECT_101
                 )
             except Exception:
@@ -255,7 +255,7 @@ def create_ken_burns_clip(
                 target_size,
                 Image.Transform.AFFINE,
                 data=matrix,
-                resample=Image.Resampling.BILINEAR
+                resample=Image.Resampling.BICUBIC
             )
             res = np.array(resized)
 
@@ -269,7 +269,7 @@ def create_ken_burns_clip(
             if t < half_dur and start_transition in FRAME_LEVEL_TRANSITIONS:
                 alpha = max(0.0, min(1.0, t / half_dur))
                 if start_transition == "Cross Dissolve" and prev_frame is not None:
-                    res_float = res_float * (0.5 + 0.5 * alpha) + prev_frame * (0.5 * (1.0 - alpha))
+                    res_float = res_float * alpha + prev_frame * (1.0 - alpha)
                 elif start_transition == "Dip to White":
                     res_float = res_float * alpha + 255.0 * (1.0 - alpha)
                 elif start_transition == "Dip to Black":
@@ -282,7 +282,7 @@ def create_ken_burns_clip(
             elif t > duration - half_dur and end_transition in FRAME_LEVEL_TRANSITIONS:
                 alpha = max(0.0, min(1.0, (duration - t) / half_dur))
                 if end_transition == "Cross Dissolve" and next_frame is not None:
-                    res_float = res_float * (0.5 + 0.5 * alpha) + next_frame * (0.5 * (1.0 - alpha))
+                    res_float = res_float * alpha + next_frame * (1.0 - alpha)
                 elif end_transition == "Dip to White":
                     res_float = res_float * alpha + 255.0 * (1.0 - alpha)
                 elif end_transition == "Dip to Black":
@@ -292,6 +292,10 @@ def create_ken_burns_clip(
                 elif end_transition == "Dip to Cool Cyan":
                     res_float = res_float * alpha + np.array([100.0, 200.0, 255.0], dtype=np.float32) * (1.0 - alpha)
                 res = np.clip(res_float, 0, 255).astype(np.uint8)
+
+        # Add subtle cinematic motion blur during zooms to prevent 60 FPS staccato/jitter
+        if CV2_AVAILABLE and scale > 1.05:
+            res = cv2.GaussianBlur(res, (3, 3), 0)
 
         return res
 
