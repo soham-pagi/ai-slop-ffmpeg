@@ -1,3 +1,4 @@
+from src.video_generator import run_gradio_generation
 import os
 import json
 import argparse
