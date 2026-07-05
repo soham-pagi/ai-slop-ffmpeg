@@ -54,7 +54,13 @@ def export_video_with_gpu_pipe(final_video, output_path: str, fps: int, progress
     print(f"    -> Command: {' '.join(command)}")
     print("="*60 + "\n")
 
-    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=64 * 1024 * 1024  # 64 MB pipe buffer for high-speed streaming
+    )
 
     if process.stdin is None:
         stderr_output = process.stderr.read().decode(errors="replace") if process.stderr else "No stderr available"
@@ -67,7 +73,8 @@ def export_video_with_gpu_pipe(final_video, output_path: str, fps: int, progress
     try:
         for i, frame in enumerate(final_video.iter_frames(fps=fps, dtype='uint8')):
             try:
-                process.stdin.write(frame.tobytes())
+                # Use zero-copy memoryview instead of .tobytes() to prevent 186+ GB of heap allocation
+                process.stdin.write(memoryview(frame))
             except BrokenPipeError:
                 stderr_output = process.stderr.read().decode(errors="replace") if process.stderr else "No stderr available"
                 raise RuntimeError(
