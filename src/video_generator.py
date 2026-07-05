@@ -40,8 +40,8 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
         else: zp = f"z='1.2':x='max(iw-iw/zoom-on*1.5,0)':y='ih/2-(ih/zoom/2)'"
         
         in_label, out_label = f"[{i}:v]", f"[v{i}]"
-        # Scale to 4K (4096w) sweet spot: reduces swscaler pixel load by 74% to boost GPU speed to 45+ FPS while keeping deterministic anti-jitter math
-        filter_parts.append(f"{in_label}scale=4096:-1,zoompan={zp}:d={frames}:s={w}x{h}:fps={fps},format=yuva420p{out_label}")
+        # Industry-standard jitter fix: pre-scale to massive 8000px canvas with Lanczos so integer rounding errors become negligible (<0.25px) when downscaled
+        filter_parts.append(f"{in_label}scale=8000:-1:flags=lanczos,zoompan={zp}:d={frames}:s={w}x{h}:fps={fps},format=yuva420p{out_label}")
         
         if i == 0:
             prev_label = out_label
@@ -72,8 +72,8 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
     if len(timeline_data) == 1: filter_parts.append(f"[v0]format=yuv420p[outv]")
         
     audio_idx = len(timeline_data)
-    # Add -hide_banner and -nostdin for clean cloud container execution without ALSA/stdin locking
-    cmd_base = ["ffmpeg", "-y", "-hide_banner", "-nostdin"] + inputs + ["-filter_complex", ";".join(filter_parts), "-map", "[outv]"]
+    # Add -hide_banner, -nostdin, and -sws_flags lanczos+accurate_rnd+full_chroma_int for sub-pixel accurate Lanczos resampling without shimmering or vibration
+    cmd_base = ["ffmpeg", "-y", "-hide_banner", "-nostdin", "-sws_flags", "lanczos+accurate_rnd+full_chroma_int"] + inputs + ["-filter_complex", ";".join(filter_parts), "-map", "[outv]"]
     if has_audio: cmd_base.extend(["-map", f"{audio_idx}:a", "-c:a", "aac", "-b:a", "320k"])
     
     # Check if NVIDIA GPU hardware encoding is available
