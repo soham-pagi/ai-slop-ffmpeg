@@ -552,9 +552,9 @@ async () => {
 
 
 READ_TIMELINE_JS = """
-() => {
+(old_val) => {
     const tbody = document.getElementById('timeline-tbody');
-    if (!tbody) return;
+    if (!tbody) return old_val;
     const data = [];
     tbody.querySelectorAll('tr').forEach((tr) => {
         data.push({
@@ -566,12 +566,17 @@ READ_TIMELINE_JS = """
             transition: tr.querySelector('select[data-field="transition"]')?.value || 'Random'
         });
     });
+    const new_val = JSON.stringify(data);
     const el = document.querySelector('#timeline-json-bridge textarea, #timeline-json-bridge input');
-    if (!el) return;
-    const proto = el.tagName.toLowerCase() === 'textarea' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
-    const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value').set;
-    nativeSetter.call(el, JSON.stringify(data));
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+    if (el) {
+        const proto = el.tagName.toLowerCase() === 'textarea' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+        const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+        if (nativeSetter) {
+            nativeSetter.call(el, new_val);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }
+    return new_val;
 }
 """
 
@@ -708,6 +713,10 @@ def sort_by_timestamp(json_str):
         return html, json_data
     except Exception:
         return build_timeline_html([]), "[]"
+
+
+def sync_timeline_bridge(val):
+    return val
 
 
 def run_gradio_generation(
@@ -1025,7 +1034,9 @@ with gr.Blocks(**blocks_kwargs) as demo:
     )
 
     generate_btn.click(
-        fn=None,
+        fn=sync_timeline_bridge,
+        inputs=[timeline_json_bridge],
+        outputs=[timeline_json_bridge],
         js=READ_TIMELINE_JS
     ).then(
         fn=run_gradio_generation,
