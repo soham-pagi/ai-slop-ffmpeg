@@ -998,19 +998,22 @@ with gr.Blocks(**blocks_kwargs) as demo:
     ).then(
         fn=populate_timeline,
         inputs=[script_mode, script_file, script_text, audio_file, image_mode, images_folder, uploaded_images, mapping_radio, timeline_json_bridge],
-        outputs=[timeline_html, timeline_json_bridge]
+        outputs=[timeline_html, timeline_json_bridge],
+        show_progress="full"
     )
 
     sort_btn.click(
         fn=sort_by_timestamp,
         inputs=[timeline_json_bridge],
-        outputs=[timeline_html, timeline_json_bridge]
+        outputs=[timeline_html, timeline_json_bridge],
+        show_progress="full"
     )
 
     equalize_btn.click(
         fn=equalize_durations,
         inputs=[audio_file, timeline_json_bridge],
-        outputs=[timeline_html, timeline_json_bridge]
+        outputs=[timeline_html, timeline_json_bridge],
+        show_progress="full"
     )
 
     gen_event = generate_btn.click(
@@ -1026,7 +1029,8 @@ with gr.Blocks(**blocks_kwargs) as demo:
             res_dropdown, fps_dropdown, transition_slider, mapping_radio,
             timeline_json_bridge, effect_strategy_dropdown, transition_style_dropdown
         ],
-        outputs=[output_video, output_file, output_status]
+        outputs=[output_video, output_file, output_status],
+        show_progress="full"
     )
 
     def cancel_generation_fn():
