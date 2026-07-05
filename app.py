@@ -168,6 +168,15 @@ def build_timeline_html(rows):
         start = r.get("start", "0.0")
         dur = r.get("duration", "5.0")
         path = r.get("path", "")
+        eff_val = r.get("effect", "Random / Global") or "Random / Global"
+        trans_val = r.get("transition", "Random / Global") or "Random / Global"
+
+        eff_options = ["Random / Global", "zoom_in", "zoom_out", "pan_right_zoom_in", "pan_left_zoom_in", "pan_up_zoom_in", "pan_down_zoom_in", "pan_right_zoom_out", "pan_left_zoom_out", "pan_up_right_zoom_in", "pan_down_left_zoom_in", "zoom_in_fast_slow", "zoom_out_slow_fast"]
+        trans_options = ["Random / Global", "Cross-Dissolve (Hollywood Blend)", "Flash / Dip to White", "Dip to Black", "Flash / Dip to Warm Gold", "Flash / Dip to Cool Cyan", "Clean Cut (No Fade)"]
+
+        eff_html = "".join([f'<option value="{opt}"{" selected" if opt == eff_val else ""}>{opt}</option>' for opt in eff_options])
+        trans_html = "".join([f'<option value="{opt}"{" selected" if opt == trans_val else ""}>{opt}</option>' for opt in trans_options])
+
         thumb_img = (
             f'<img src="{thumb}" style="height:40px; width:64px; border-radius:3px; object-fit:cover; border:1px solid #3a3a5c;" />'
             if thumb else
@@ -178,16 +187,22 @@ def build_timeline_html(rows):
         <tr data-idx="{i}" data-path="{path}" data-filename="{fname}"
             class="tl-row">
           <td class="tl-cell tl-handle">⠿</td>
-          <td class="tl-cell" style="text-align:center; width:72px;">{i + 1}</td>
+          <td class="tl-cell" style="text-align:center; width:50px;">{i + 1}</td>
           <td class="tl-cell" style="text-align:center; width:80px;">{thumb_img}</td>
           <td class="tl-cell tl-filename">{fname}</td>
-          <td class="tl-cell" style="text-align:center; width:90px;">
+          <td class="tl-cell" style="text-align:center; width:75px;">
             <input type="text" value="{start}" data-field="start" class="tl-input"
                    onchange="window.__startEdited && window.__startEdited()" />
           </td>
-          <td class="tl-cell" style="text-align:center; width:90px;">
+          <td class="tl-cell" style="text-align:center; width:75px;">
             <input type="text" value="{dur}" data-field="duration" class="tl-input"
                    onchange="window.__timelineChanged && window.__timelineChanged()" />
+          </td>
+          <td class="tl-cell" style="text-align:center; width:125px;">
+            <select data-field="effect" class="tl-select" onchange="window.__timelineChanged && window.__timelineChanged()">{eff_html}</select>
+          </td>
+          <td class="tl-cell" style="text-align:center; width:145px;">
+            <select data-field="transition" class="tl-select" onchange="window.__timelineChanged && window.__timelineChanged()">{trans_html}</select>
           </td>
         </tr>
         """
@@ -280,6 +295,23 @@ def build_timeline_html(rows):
         border-color: #6366f1;
         box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
       }}
+      .tl-select {{
+        width: 100%;
+        padding: 4px 6px;
+        border: 1px solid #2a2a4a;
+        border-radius: 4px;
+        background: #0f0f23;
+        color: #e0e0ff;
+        font-size: 11px;
+        font-family: 'Consolas', 'Fira Code', monospace;
+        outline: none;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        cursor: pointer;
+      }}
+      .tl-select:focus {{
+        border-color: #8b5cf6;
+        box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+      }}
 
       /* SortableJS ghost/chosen */
       .sortable-ghost {{
@@ -302,11 +334,13 @@ def build_timeline_html(rows):
           <thead>
             <tr>
               <th style="width:28px;"></th>
-              <th style="width:72px;">#</th>
+              <th style="width:50px;">#</th>
               <th style="width:80px;">Preview</th>
               <th style="text-align:left;">Filename</th>
-              <th style="width:90px;">Start (s)</th>
-              <th style="width:90px;">Duration (s)</th>
+              <th style="width:75px;">Start (s)</th>
+              <th style="width:75px;">Duration (s)</th>
+              <th style="width:125px;">Effect</th>
+              <th style="width:145px;">Transition</th>
             </tr>
           </thead>
           <tbody id="timeline-tbody">
@@ -391,6 +425,8 @@ async () => {
         rows.forEach((tr, idx) => {
             const sInput = tr.querySelector('input[data-field="start"]');
             const dInput = tr.querySelector('input[data-field="duration"]');
+            const eSelect = tr.querySelector('select[data-field="effect"]');
+            const tSelect = tr.querySelector('select[data-field="transition"]');
             let dur = 5.0;
             if (dInput) {
                 const p = parseFloat(dInput.value);
@@ -404,11 +440,16 @@ async () => {
             const cells = tr.querySelectorAll('td');
             if (cells.length >= 2) cells[1].textContent = idx + 1;
 
+            const eff = eSelect ? eSelect.value : 'Random / Global';
+            const trans = tSelect ? tSelect.value : 'Random / Global';
+
             data.push({
                 path: tr.getAttribute('data-path') || '',
                 filename: tr.getAttribute('data-filename') || '',
                 start: cumulative.toFixed(2),
-                duration: dur.toString()
+                duration: dur.toString(),
+                effect: eff,
+                transition: trans
             });
             cumulative += dur;
         });
@@ -428,15 +469,22 @@ async () => {
         rows.forEach((tr, idx) => {
             const sInput = tr.querySelector('input[data-field="start"]');
             const dInput = tr.querySelector('input[data-field="duration"]');
+            const eSelect = tr.querySelector('select[data-field="effect"]');
+            const tSelect = tr.querySelector('select[data-field="transition"]');
 
             const cells = tr.querySelectorAll('td');
             if (cells.length >= 2) cells[1].textContent = idx + 1;
+
+            const eff = eSelect ? eSelect.value : 'Random / Global';
+            const trans = tSelect ? tSelect.value : 'Random / Global';
 
             data.push({
                 path: tr.getAttribute('data-path') || '',
                 filename: tr.getAttribute('data-filename') || '',
                 start: sInput ? sInput.value : '0.0',
-                duration: dInput ? dInput.value : '5.0'
+                duration: dInput ? dInput.value : '5.0',
+                effect: eff,
+                transition: trans
             });
         });
 
@@ -501,11 +549,13 @@ def populate_timeline(script_mode, script_file, script_text, audio_file, image_m
                 "filename": os.path.basename(mc.image_path),
                 "path": mc.image_path,
                 "start": str(round(mc.start_time, 2)),
-                "duration": str(round(mc.duration, 2))
+                "duration": str(round(mc.duration, 2)),
+                "effect": getattr(mc, "effect", "Random / Global") or "Random / Global",
+                "transition": getattr(mc, "transition", "Random / Global") or "Random / Global"
             })
 
         html = build_timeline_html(rows)
-        json_data = json.dumps([{"path": r["path"], "filename": r["filename"], "start": r["start"], "duration": r["duration"]} for r in rows])
+        json_data = json.dumps([{"path": r["path"], "filename": r["filename"], "start": r["start"], "duration": r["duration"], "effect": r.get("effect", "Random / Global"), "transition": r.get("transition", "Random / Global")} for r in rows])
         return html, json_data
     except Exception as e:
         error_html = f'<div style="color:#ff6b6b; padding:16px; background:#1a0a0a; border-radius:8px;">❌ {str(e)}</div>'
@@ -539,12 +589,14 @@ def equalize_durations(audio_file, json_str):
                 "filename": r.get("filename", ""),
                 "path": r.get("path", ""),
                 "start": str(round(curr_t, 2)),
-                "duration": str(per_dur)
+                "duration": str(per_dur),
+                "effect": r.get("effect", "Random / Global"),
+                "transition": r.get("transition", "Random / Global")
             })
             curr_t += per_dur
 
         html = build_timeline_html(new_rows)
-        json_data = json.dumps([{"path": r["path"], "filename": r["filename"], "start": r["start"], "duration": r["duration"]} for r in new_rows])
+        json_data = json.dumps([{"path": r["path"], "filename": r["filename"], "start": r["start"], "duration": r["duration"], "effect": r.get("effect", "Random / Global"), "transition": r.get("transition", "Random / Global")} for r in new_rows])
         return html, json_data
     except Exception:
         return build_timeline_html([]), "[]"
@@ -572,11 +624,13 @@ def sort_by_timestamp(json_str):
                 "filename": r.get("filename", ""),
                 "path": r.get("path", ""),
                 "start": r.get("start", "0.0"),
-                "duration": r.get("duration", "5.0")
+                "duration": r.get("duration", "5.0"),
+                "effect": r.get("effect", "Random / Global"),
+                "transition": r.get("transition", "Random / Global")
             })
 
         html = build_timeline_html(new_rows)
-        json_data = json.dumps([{"path": r["path"], "filename": r["filename"], "start": r["start"], "duration": r["duration"]} for r in new_rows])
+        json_data = json.dumps([{"path": r["path"], "filename": r["filename"], "start": r["start"], "duration": r["duration"], "effect": r.get("effect", "Random / Global"), "transition": r.get("transition", "Random / Global")} for r in new_rows])
         return html, json_data
     except Exception:
         return build_timeline_html([]), "[]"
@@ -586,7 +640,7 @@ def run_gradio_generation(
     script_mode, script_file, script_text, audio_file,
     image_mode, images_folder, uploaded_images,
     res_str, fps, transition, mapping_mode,
-    timeline_json_str, effect_strategy="Random (No Consecutive Repeats)", transition_style="Cross-Dissolve (Hollywood Blend)", progress=gr.Progress()
+    timeline_json_str, effect_strategy="Random (No Consecutive Repeats)", transition_style="Random Cinematic", progress=gr.Progress()
 ):
     try:
         # 1. Resolve Script Source (Optional)
@@ -639,12 +693,14 @@ def run_gradio_generation(
                             continue
                         start_str = r.get("start", "0.0")
                         dur_str = r.get("duration", "5.0")
-                        valid_rows.append(["", identifier, start_str, dur_str])
+                        eff_str = r.get("effect", "Random / Global")
+                        trans_str = r.get("transition", "Random / Global")
+                        valid_rows.append(["", identifier, start_str, dur_str, eff_str, trans_str])
                     if valid_rows:
                         custom_tl = valid_rows
                         print(f"\n[Timeline Bridge] Received {len(valid_rows)} clips from UI:")
                         for i, row in enumerate(valid_rows):
-                            print(f"  Clip {i+1}: {os.path.basename(row[1])}  start={row[2]}s  dur={row[3]}s")
+                            print(f"  Clip {i+1}: {os.path.basename(row[1])}  start={row[2]}s  dur={row[3]}s  eff={row[4]}  trans={row[5]}")
             except Exception as e:
                 print(f"[Timeline Bridge] JSON parse error: {e}")
 
@@ -802,8 +858,8 @@ with gr.Blocks(**blocks_kwargs) as demo:
                     )
                 with gr.Row():
                     transition_style_dropdown = gr.Dropdown(
-                        choices=["Cross-Dissolve (Hollywood Blend)", "Flash / Dip to White", "Random Cinematic", "Clean Cut (No Fade)", "Dip to Black"],
-                        value="Cross-Dissolve (Hollywood Blend)",
+                        choices=["Random Cinematic", "Cross-Dissolve (Hollywood Blend)", "Flash / Dip to White", "Dip to Black", "Flash / Dip to Warm Gold", "Flash / Dip to Cool Cyan", "Clean Cut (No Fade)"],
+                        value="Random Cinematic",
                         label="Transition Style"
                     )
                     effect_strategy_dropdown = gr.Dropdown(

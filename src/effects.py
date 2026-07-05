@@ -228,6 +228,10 @@ def create_ken_burns_clip(
                     res_float = res_float * alpha + 255.0 * (1.0 - alpha)
                 elif start_transition == "Dip to Black":
                     res_float = res_float * alpha
+                elif start_transition == "Flash / Dip to Warm Gold":
+                    res_float = res_float * alpha + np.array([255.0, 215.0, 100.0], dtype=np.float32) * (1.0 - alpha)
+                elif start_transition == "Flash / Dip to Cool Cyan":
+                    res_float = res_float * alpha + np.array([100.0, 200.0, 255.0], dtype=np.float32) * (1.0 - alpha)
                 res = np.clip(res_float, 0, 255).astype(np.uint8)
             elif t > duration - half_dur and end_transition != "Clean Cut (No Fade)":
                 alpha = max(0.0, min(1.0, (duration - t) / half_dur))
@@ -237,6 +241,10 @@ def create_ken_burns_clip(
                     res_float = res_float * alpha + 255.0 * (1.0 - alpha)
                 elif end_transition == "Dip to Black":
                     res_float = res_float * alpha
+                elif end_transition == "Flash / Dip to Warm Gold":
+                    res_float = res_float * alpha + np.array([255.0, 215.0, 100.0], dtype=np.float32) * (1.0 - alpha)
+                elif end_transition == "Flash / Dip to Cool Cyan":
+                    res_float = res_float * alpha + np.array([100.0, 200.0, 255.0], dtype=np.float32) * (1.0 - alpha)
                 res = np.clip(res_float, 0, 255).astype(np.uint8)
 
         return res

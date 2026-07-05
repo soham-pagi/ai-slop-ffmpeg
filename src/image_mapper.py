@@ -13,6 +13,8 @@ class MappedClip:
     text: str
     start_time: float
     end_time: float
+    effect: str = "Random / Global"
+    transition: str = "Random / Global"
 
 
 def natural_sort_key(s: str):
@@ -256,18 +258,22 @@ def create_custom_timeline(
                 filename = str(row[1]).strip()
                 start_val = None
                 dur_val = parse_time_str(row[2])
+            eff_val = "Random / Global"
+            trans_val = "Random / Global"
         elif len(row) >= 4:
-            # [preview, filename, start_timestamp, duration]
+            # [preview, filename, start_timestamp, duration, effect, transition]
             filename = str(row[1]).strip()
             start_val = parse_time_str(row[2])
             dur_val = parse_time_str(row[3])
+            eff_val = str(row[4]).strip() if len(row) > 4 and row[4] else "Random / Global"
+            trans_val = str(row[5]).strip() if len(row) > 5 and row[5] else "Random / Global"
         else:
             continue
             
         if not filename or "Please select" in filename or "Error:" in filename:
             continue
             
-        parsed_items.append((filename, start_val, dur_val))
+        parsed_items.append((filename, start_val, dur_val, eff_val, trans_val))
         
     if not parsed_items:
         raise ValueError("Custom timeline resulted in 0 valid rows. Please check table data.")
@@ -280,10 +286,12 @@ def create_custom_timeline(
 
     print(f"\n[CustomTimeline] Processing {num_items} clips (audio_duration={audio_duration:.2f}s):")
 
-    for i, (fname, s_val, d_val) in enumerate(parsed_items):
+    for i, (fname, s_val, d_val, eff_val, trans_val) in enumerate(parsed_items):
         # Determine duration
         if d_val is not None and d_val > 0:
             dur = d_val
+        elif i < num_items - 1 and s_val is not None and parsed_items[i+1][1] is not None and parsed_items[i+1][1] > s_val:
+            dur = parsed_items[i+1][1] - s_val
         elif i == num_items - 1 and audio_duration > 0:
             # Last clip: extend to fill remaining audio
             preceding_dur = sum(mc.duration for mc in mapped_clips)
@@ -306,7 +314,7 @@ def create_custom_timeline(
         img_path = find_matching_image(fname, image_paths, path_map)
 
         print(f"  [{i+1}/{num_items}] {os.path.basename(img_path)}  "
-              f"start={start_t:.2f}s  dur={dur:.2f}s  "
+              f"start={start_t:.2f}s  dur={dur:.2f}s  effect={eff_val}  trans={trans_val}  "
               f"(src: {'path' if os.path.isabs(fname) else 'name'})")
 
         mapped_clips.append(
@@ -316,7 +324,9 @@ def create_custom_timeline(
                 segment_index=i + 1,
                 text=f"Manual Segment {i+1}",
                 start_time=start_t,
-                end_time=start_t + dur
+                end_time=start_t + dur,
+                effect=eff_val,
+                transition=trans_val
             )
         )
 

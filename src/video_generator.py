@@ -144,7 +144,7 @@ def generate_video(
     progress_callback: Optional[Callable] = None,
     custom_timeline: Optional[List[list]] = None,
     effect_strategy: str = "Random (No Consecutive Repeats)",
-    transition_style: str = "Cross-Dissolve (Hollywood Blend)"
+    transition_style: str = "Random Cinematic"
 ):
     """
     Orchestrates parsing, image mapping, Ken Burns animation, audio syncing, and video export.
@@ -222,10 +222,17 @@ def generate_video(
     import random
 
     # Pre-generate distinct transition styles for every single cut in the video!
+    # cut_transitions[j] represents the cut BETWEEN clip j and clip j+1.
+    # A clip's per-row transition setting controls how it ENTERS (its incoming transition).
+    # So clip j+1's transition setting -> cut_transitions[j].
     cut_transitions = []
-    all_styles = ["Cross-Dissolve (Hollywood Blend)", "Flash / Dip to White", "Clean Cut (No Fade)"]
+    all_styles = ["Cross-Dissolve (Hollywood Blend)", "Flash / Dip to White", "Dip to Black", "Flash / Dip to Warm Gold", "Flash / Dip to Cool Cyan"]
     for j in range(max(0, len(mapped_clips) - 1)):
-        if transition_style == "Random Cinematic":
+        # The clip entering at this cut is mapped_clips[j+1]
+        mc_trans = getattr(mapped_clips[j + 1], "transition", "Random / Global")
+        if mc_trans and mc_trans not in ["Random / Global", "Random", "Auto", "Global Strategy", ""]:
+            cut_transitions.append(mc_trans)
+        elif transition_style == "Random Cinematic":
             cut_transitions.append(random.choice(all_styles))
         else:
             cut_transitions.append(transition_style)
@@ -234,7 +241,11 @@ def generate_video(
         if progress_callback:
             progress_callback(0.2 + 0.5 * (i / len(mapped_clips)), f"Creating animation clip {i+1}/{len(mapped_clips)}...")
             
-        if effect_strategy == "Cycle All (Ordered)":
+        mc_eff = getattr(mc, "effect", "Random / Global")
+        if mc_eff and mc_eff not in ["Random / Global", "Random", "Auto", "Global Strategy", ""]:
+            effect = mc_eff
+            last_effect = effect
+        elif effect_strategy == "Cycle All (Ordered)":
             effect = pool[i % len(pool)]
         else:
             # Smart random: never pick the exact same effect twice in a row
