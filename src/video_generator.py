@@ -3,7 +3,7 @@ import random
 import os
 import json
 
-def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=60, trans_dur=0.5):
+def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=60, trans_dur=0.5, transition_style="Random"):
     """Native FFmpeg Filtergraph Generator. Bypasses Python pixel-piping. Renders at C++ speeds."""
     inputs = []
     filter_parts = []
@@ -47,11 +47,27 @@ def generate_video(timeline_data, audio_path, output_path, w=1920, h=1080, fps=6
             prev_label = out_label
             cumulative_time = dur
         else:
-            offset = cumulative_time - trans_dur
+            safe_dur = max(0.05, trans_dur)
+            offset = cumulative_time - safe_dur
             next_label = f"[t{i}]" if i < len(timeline_data) - 1 else "[outv]"
-            filter_parts.append(f"{prev_label}{out_label}xfade=transition=fade:duration={trans_dur}:offset={offset}{next_label}")
+            
+            # Resolve transition style from item or global dropdown
+            trans_str = str(item.get('transition', '')).lower()
+            if not trans_str or 'random' in trans_str:
+                trans_str = str(transition_style or '').lower()
+                
+            if 'black' in trans_str: xfade_name = 'fadeblack'
+            elif 'white' in trans_str or 'gold' in trans_str or 'cyan' in trans_str: xfade_name = 'fadewhite'
+            elif 'from left' in trans_str: xfade_name = 'slideright'
+            elif 'from right' in trans_str: xfade_name = 'slideleft'
+            elif 'from top' in trans_str: xfade_name = 'slidedown'
+            elif 'from bottom' in trans_str: xfade_name = 'slideup'
+            elif 'dissolve' in trans_str or 'fade' in trans_str: xfade_name = 'fade'
+            else: xfade_name = random.choice(['fade', 'fadeblack', 'fadewhite', 'smoothleft', 'smoothright', 'circlecrop', 'distance'])
+            
+            filter_parts.append(f"{prev_label}{out_label}xfade=transition={xfade_name}:duration={safe_dur}:offset={offset}{next_label}")
             prev_label = next_label
-            cumulative_time += (dur - trans_dur)
+            cumulative_time += (dur - safe_dur)
             
     if len(timeline_data) == 1: filter_parts.append(f"[v0]format=yuv420p[outv]")
         
@@ -81,7 +97,7 @@ def run_gradio_generation(script_mode, script_file, script_text, audio_file,
         os.makedirs("output_video", exist_ok=True)
         output_path = "output_video/native_render.mp4"
         
-        generate_video(timeline_data, audio_path, output_path, w, h, fps, trans_dur)
+        generate_video(timeline_data, audio_path, output_path, w, h, fps, trans_dur, transition_style_dropdown)
         return output_path, "Success! Rendered via Native FFmpeg C++ Engine."
     except Exception as e:
         return None, f"Error: {str(e)}\n{traceback.format_exc()}"
