@@ -1,4 +1,4 @@
-# 🎬 Salt-2-Artstyle: Automated Video Generator
+# 🎬 AI Video Maker: Image-to-Video Generator
 
 An automated, AI-ready video generation pipeline built with **MoviePy**, **Pillow**, **Gradio**, and **FFmpeg**. It takes timestamped narration scripts, audio recordings, and images, transforming them into premium, dynamic videos with Ken Burns zoom/pan animations and cinematic fade transitions.
 

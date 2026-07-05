@@ -1,7 +1,7 @@
 [project]
-name = "salt-2-artstyle"
+name = "ai-video-maker"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI Image-to-Video Maker with Ken Burns & GPU Acceleration"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [

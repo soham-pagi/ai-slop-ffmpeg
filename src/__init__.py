@@ -1,1 +1,1 @@
-# salt-2-artstyle source package
+# ai-video-maker source package

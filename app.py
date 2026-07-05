@@ -791,7 +791,7 @@ except Exception:
     GRADIO_V6 = False
 
 blocks_kwargs: dict[str, Any] = {
-    "title": "Salt Video Editor",
+    "title": "AI Video Maker",
     "css": EDITOR_CSS,
 }
 if not GRADIO_V6:
@@ -804,7 +804,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
     <div id="editor-header" style="display:flex; align-items:center; justify-content:space-between;">
         <div style="display:flex; align-items:center; gap:10px;">
             <span style="font-size:22px;">🎬</span>
-            <span style="font-size:16px; font-weight:700; color:#e0e0ff; letter-spacing:1px;">SALT VIDEO EDITOR</span>
+            <span style="font-size:16px; font-weight:700; color:#e0e0ff; letter-spacing:1px;">AI VIDEO MAKER</span>
             <span style="font-size:11px; color:#5555aa; padding-left:8px;">Ken Burns · GPU Accelerated</span>
         </div>
         <div style="font-size:11px; color:#4444aa; font-family:monospace;">v2.0</div>
@@ -1014,12 +1014,12 @@ with gr.Blocks(**blocks_kwargs) as demo:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Launch Salt Video Editor")
+    parser = argparse.ArgumentParser(description="Launch AI Video Maker")
     parser.add_argument("--share", action="store_true", help="Create a publicly shareable Gradio link (recommended on Kaggle!)")
     parser.add_argument("--port", type=int, default=7860, help="Port to run the server on")
     args = parser.parse_args()
 
-    print(f"\nLaunching Salt Video Editor (Share={args.share}, Port={args.port}, Gradio v{gr.__version__})...")
+    print(f"\nLaunching AI Video Maker (Share={args.share}, Port={args.port}, Gradio v{gr.__version__})...")
     launch_kwargs: dict[str, Any] = {"share": args.share, "server_port": args.port}
     if GRADIO_V6:
         launch_kwargs["theme"] = gr.themes.Default()  # type: ignore

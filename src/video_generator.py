@@ -226,7 +226,7 @@ def generate_video(
     Supports both file paths and raw string inputs (for Gradio UI).
     """
     print(f"\n=======================================================")
-    print(f"       Salt-2-Artstyle Automated Video Generator       ")
+    print(f"       AI Image-to-Video Maker       ")
     print(f"=======================================================\n")
     
     # Load audio early if needed for duration calculation
