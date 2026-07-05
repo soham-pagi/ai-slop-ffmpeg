@@ -910,6 +910,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
             with gr.Row():
                 with gr.Column(scale=7):
                     output_video = gr.Video(label="Preview")
+                    output_file = gr.File(label="📥 Direct MP4 Download (Fast)", interactive=False)
                 with gr.Column(scale=3):
                     output_status = gr.Textbox(
                         label="Console",
@@ -951,7 +952,7 @@ with gr.Blocks(**blocks_kwargs) as demo:
             res_dropdown, fps_dropdown, transition_slider, mapping_radio,
             timeline_json_bridge, effect_strategy_dropdown, transition_style_dropdown
         ],
-        outputs=[output_video, output_status]
+        outputs=[output_video, output_file, output_status]
     )
 
     # Initialize SortableJS on page load
